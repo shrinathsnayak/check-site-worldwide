@@ -1,36 +1,163 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Check Site Worldwide
 
-## Getting Started
+A Next.js application that checks website accessibility from multiple countries using Webshare proxy services.
 
-First, run the development server:
+## Quick Start
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd check-site-worldwide
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment variables**
+   ```bash
+   cp env.example .env.local
+   # Edit .env.local with your Webshare API credentials
+   ```
+
+4. **Run the development server**
+   ```bash
+   npm run dev
+   ```
+
+5. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## API Endpoints
+
+### Check Website Accessibility
+```
+GET /api/check?url=<website-url>&countries=<country-codes>&timeout=<timeout-ms>
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Parameters:**
+- `url` (required): The website URL to check
+- `countries` (required): Comma-separated list of country codes (e.g., US,ES,PL)
+- `timeout` (optional): Request timeout in milliseconds (default: 10000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Example:**
+```bash
+curl "http://localhost:3000/api/check?url=https://google.com&countries=US,ES,PL"
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Get Supported Countries
+```
+GET /api/countries
+```
 
-## Learn More
+Returns a list of all supported countries with their codes and names.
 
-To learn more about Next.js, take a look at the following resources:
+## Features
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- ✅ **Global Testing**: Check website accessibility from multiple countries
+- ✅ **Proxy Integration**: Uses Webshare proxy services for accurate results
+- ✅ **Real-time Results**: Get response times and status from each country
+- ✅ **Caching**: Intelligent caching for improved performance
+- ✅ **Rate Limiting**: Built-in rate limiting for API protection
+- ✅ **Error Handling**: Comprehensive error handling and logging
+- ✅ **TypeScript**: Full TypeScript support for type safety
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Environment Variables
 
-## Deploy on Vercel
+Create a `.env.local` file with the following variables:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```env
+# Webshare API Configuration
+WEBSHARE_API_KEY=your_webshare_api_key
+WEBSHARE_API_URL=https://proxy.webshare.io/api/v2/proxy/list/
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Application Configuration
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+API_ENDPOINT=https://your-api-domain.com
+
+# Optional: Enable caching in development
+ENABLE_CACHE=true
+```
+
+## Project Structure
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/               # API routes
+│   │   ├── check/         # Website checking endpoint
+│   │   └── countries/     # Countries list endpoint
+│   ├── layout.tsx         # Root layout
+│   ├── page.tsx           # Home page
+│   ├── sitemap.ts         # Dynamic sitemap generation
+│   └── robots.ts          # Dynamic robots.txt generation
+├── lib/                    # Core library
+│   ├── api/               # API-related functionality
+│   ├── cache/             # Caching system
+│   ├── constants/         # Configuration constants
+│   ├── services/          # Core business logic
+│   ├── types/             # TypeScript type definitions
+│   ├── utils/             # Utility functions
+│   └── validation/        # Input validation
+└── middleware.ts           # Rate limiting and security headers
+```
+
+## Development
+
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run format` - Format code with Prettier
+
+### Code Organization
+
+The project follows a clean architecture pattern:
+
+- **API Layer**: Handles HTTP requests and responses
+- **Service Layer**: Core business logic for website checking
+- **Cache Layer**: Intelligent caching for performance
+- **Validation Layer**: Input validation and error handling
+- **Utils Layer**: Reusable utility functions
+
+## Deployment
+
+### Vercel (Recommended)
+
+1. Connect your GitHub repository to Vercel
+2. Set environment variables in Vercel dashboard
+3. Deploy automatically on push to main branch
+
+### Other Platforms
+
+The application can be deployed to any platform that supports Next.js:
+
+- **Netlify**: Use the Next.js build command
+- **Railway**: Deploy directly from GitHub
+- **DigitalOcean App Platform**: Supports Next.js out of the box
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Support
+
+For issues and questions:
+- Create an issue on GitHub
+- Check the documentation
+- Review the API examples
+
+---
+
+**Check Site Worldwide** - Test your website's global accessibility with confidence! 🌍

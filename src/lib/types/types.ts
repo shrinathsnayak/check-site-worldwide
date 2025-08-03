@@ -1,0 +1,89 @@
+export interface CheckResult {
+  country: string;
+  countryName: string;
+  region: string;
+  accessible: boolean;
+  responseTime: number;
+  statusCode: number;
+  error?: string;
+  timestamp: string;
+}
+
+export interface CheckSummary {
+  total: number;
+  accessible: number;
+  inaccessible: number;
+  successRate: number;
+  avgResponseTime: number;
+}
+
+export interface CheckResponse {
+  success: boolean;
+  url: string;
+  summary: CheckSummary;
+  resultsByRegion: Record<string, CheckResult[]>;
+}
+
+export interface CountryInfo {
+  code: string;
+  name: string;
+  region: string;
+}
+
+export interface CountriesResponse {
+  success: boolean;
+  resultsByRegion: Record<
+    string,
+    Array<{ code: string; name: string; continent: string; supported: boolean }>
+  >;
+}
+
+export interface ErrorResponse {
+  success: false;
+  error: string;
+  message: string;
+  status: number;
+  details?: unknown;
+  supportedCountries?: string[];
+}
+
+export interface PaidProxy {
+  host: string;
+  port: number;
+  country: string;
+  region: string;
+  protocol: 'http' | 'https';
+  anonymity: 'elite' | 'anonymous' | 'transparent';
+  lastChecked: string;
+  uptime: number;
+  // Authentication fields for paid proxies
+  username?: string;
+  password?: string;
+}
+
+// Logger types
+export enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3,
+  FATAL = 4,
+}
+
+export interface LoggerConfig {
+  level: LogLevel;
+  enableConsole: boolean;
+  format: 'json' | 'text';
+  includeTimestamp: boolean;
+  includeLevel: boolean;
+  includeContext: boolean;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  message: string;
+  context?: string;
+  data?: unknown;
+  error?: Error;
+}
