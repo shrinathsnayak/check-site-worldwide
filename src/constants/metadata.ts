@@ -6,39 +6,50 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://checksiteworldwide.
 // Site information
 export const SITE_INFO = {
   name: 'Check Site Worldwide',
-  description: 'Check if your website is accessible from different countries around the world. Test website availability, response times, and accessibility using our global proxy network.',
+  description: 'Check if your website is accessible from different countries around the world. Test website availability, response times, and accessibility from multiple geographic locations.',
   url: BASE_URL,
-  author: 'Check Site Worldwide Team',
+  author: 'Check Site Worldwide',
   creator: 'Check Site Worldwide',
   publisher: 'Check Site Worldwide',
-  category: 'technology',
-  classification: 'website testing tool',
+  category: 'Web Tools',
+  classification: 'Web Accessibility Tool',
 } as const;
 
 // SEO keywords
 export const SEO_KEYWORDS = [
   'website accessibility',
   'website availability',
-  'global website testing',
+  'website testing',
+  'global website check',
   'website monitoring',
-  'proxy testing',
-  'international website check',
-  'website performance',
-  'geographic accessibility',
-  'website uptime',
-  'global connectivity test',
+  'website accessibility test',
+  'check website from different countries',
+  'website availability checker',
+  'global website accessibility',
+  'website accessibility tool',
+  'website accessibility checker',
+  'website accessibility test tool',
+  'website accessibility monitoring',
+  'website accessibility checker tool',
+  'website accessibility test online',
+  'website accessibility checker online',
+  'website accessibility test free',
+  'website accessibility checker free',
+  'website accessibility test tool online',
+  'website accessibility checker tool online',
 ] as const;
 
 // Social media configuration
 export const SOCIAL_CONFIG = {
-  twitter: {
-    handle: '@iswebsiteaccessible',
-    site: '@iswebsiteaccessible',
-  },
   og: {
     type: 'website',
     locale: 'en_US',
     siteName: SITE_INFO.name,
+  },
+  twitter: {
+    handle: '@checksiteworldwide',
+    site: '@checksiteworldwide',
+    cardType: 'summary_large_image',
   },
 } as const;
 
@@ -48,7 +59,7 @@ export const IMAGE_CONFIG = {
     url: `${BASE_URL}/og-image.png`,
     width: 1200,
     height: 630,
-    alt: 'Check Site Worldwide - Global Website Testing Tool',
+    alt: 'Check Site Worldwide - Website Accessibility Testing Tool',
   },
   favicon: {
     ico: '/favicon.ico',
@@ -57,11 +68,11 @@ export const IMAGE_CONFIG = {
   },
 } as const;
 
-// Verification codes (replace with actual codes in production)
+// Verification codes
 export const VERIFICATION_CODES = {
-  google: 'your-google-verification-code',
-  yandex: 'your-yandex-verification-code',
-  yahoo: 'your-yahoo-verification-code',
+  google: 'google-site-verification-code',
+  yandex: 'yandex-verification-code',
+  yahoo: 'yahoo-verification-code',
 } as const;
 
 // PWA configuration
@@ -69,19 +80,16 @@ export const PWA_CONFIG = {
   name: SITE_INFO.name,
   shortName: SITE_INFO.name,
   description: SITE_INFO.description,
-  startUrl: '/',
-  display: 'standalone',
-  backgroundColor: '#ffffff',
   themeColor: '#000000',
-  orientation: 'portrait-primary',
+  backgroundColor: '#ffffff',
+  display: 'standalone',
+  startUrl: '/',
   scope: '/',
-  lang: 'en',
-  dir: 'ltr',
-  categories: ['utilities', 'productivity', 'developer'],
 } as const;
 
-// Main metadata configuration
+// Main metadata object
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: {
     default: `${SITE_INFO.name} - Check Website Availability from Multiple Countries`,
     template: `%s | ${SITE_INFO.name}`,
@@ -95,10 +103,6 @@ export const metadata: Metadata = {
     email: false,
     address: false,
     telephone: false,
-  },
-  metadataBase: new URL(BASE_URL),
-  alternates: {
-    canonical: '/',
   },
   openGraph: {
     type: SOCIAL_CONFIG.og.type,
@@ -117,7 +121,7 @@ export const metadata: Metadata = {
     ],
   },
   twitter: {
-    card: 'summary_large_image',
+    card: SOCIAL_CONFIG.twitter.cardType,
     title: `${SITE_INFO.name} - Check Website Availability from Multiple Countries`,
     description: SITE_INFO.description,
     images: [IMAGE_CONFIG.og.url],
@@ -140,9 +144,9 @@ export const metadata: Metadata = {
     yandex: VERIFICATION_CODES.yandex,
     yahoo: VERIFICATION_CODES.yahoo,
   },
-  category: SITE_INFO.category,
-  classification: SITE_INFO.classification,
   other: {
+    category: SITE_INFO.category,
+    classification: SITE_INFO.classification,
     'application-name': SITE_INFO.name,
     'apple-mobile-web-app-title': SITE_INFO.name,
     'apple-mobile-web-app-capable': 'yes',
@@ -151,65 +155,24 @@ export const metadata: Metadata = {
     'msapplication-TileColor': '#000000',
     'msapplication-config': '/browserconfig.xml',
     'theme-color': '#000000',
-    'color-scheme': 'light dark',
   },
 };
-
-// Head tags configuration
-export const HEAD_TAGS = {
-  favicon: [
-    { rel: 'icon', href: IMAGE_CONFIG.favicon.ico, sizes: 'any' },
-    { rel: 'icon', href: IMAGE_CONFIG.favicon.svg, type: 'image/svg+xml' },
-    { rel: 'apple-touch-icon', href: IMAGE_CONFIG.favicon.appleTouch },
-  ],
-  manifest: [{ rel: 'manifest', href: '/manifest.json' }],
-  viewport: [
-    { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-    { name: 'theme-color', content: '#000000' },
-    { name: 'color-scheme', content: 'light dark' },
-  ],
-} as const;
 
 // Sitemap configuration
 export const SITEMAP_CONFIG = {
   baseUrl: BASE_URL,
   pages: [
-    {
-      path: '/',
-      lastmod: '2024-01-01',
-      changefreq: 'weekly',
-      priority: 1.0,
-    },
-    {
-      path: '/api/check',
-      lastmod: '2024-01-01',
-      changefreq: 'monthly',
-      priority: 0.8,
-    },
-    {
-      path: '/api/countries',
-      lastmod: '2024-01-01',
-      changefreq: 'monthly',
-      priority: 0.7,
-    },
+    { path: '/', priority: 1.0, changefreq: 'daily' },
+    { path: '/api/check', priority: 0.8, changefreq: 'weekly' },
+    { path: '/api/countries', priority: 0.8, changefreq: 'weekly' },
   ],
 } as const;
 
-// Robots.txt configuration
+// Robots configuration
 export const ROBOTS_CONFIG = {
   userAgent: '*',
   allow: ['/'],
-  disallow: ['/api/', '/_next/', '/admin/'],
+  disallow: ['/api/*'],
   sitemap: `${BASE_URL}/sitemap.xml`,
-  crawlDelay: 1,
-} as const;
-
-// Browser config for Windows tiles
-export const BROWSER_CONFIG = {
-  msapplication: {
-    tile: {
-      square150x150logo: '/mstile-150x150.png',
-      TileColor: '#000000',
-    },
-  },
+  host: BASE_URL,
 } as const;

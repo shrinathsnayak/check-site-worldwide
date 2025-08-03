@@ -1,14 +1,6 @@
 // Centralized caching system for the project
-import { logCacheOperation } from '../utils/utils';
-import type { PaidProxy, CheckResult } from '../types/types';
-import { info } from '../utils/logger';
-
-// Generic cache entry interface
-export interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-  ttl: number; // Time to live in milliseconds
-}
+import type { PaidProxy, CheckResult, CacheEntry } from '@/types/types';
+import { info } from '@/utils/logger';
 
 // Cache configuration
 export const CACHE_CONFIG = {
@@ -43,11 +35,7 @@ export class Cache<T> {
     const entry = this.cache.get(cacheKey);
 
     if (entry && this.isCacheValid(entry)) {
-      logCacheOperation(
-        'Using cached data',
-        typeof key === 'string' ? [key] : key,
-        entry.data
-      );
+      info(`📦 Using cached data for key: ${cacheKey}`, 'cache');
       return entry.data;
     }
 
@@ -64,11 +52,7 @@ export class Cache<T> {
     };
 
     this.cache.set(cacheKey, entry);
-    logCacheOperation(
-      'Cached data',
-      typeof key === 'string' ? [key] : key,
-      data
-    );
+    info(`💾 Cached data for key: ${cacheKey}`, 'cache');
   }
 
   // Check if key exists and is valid
@@ -119,18 +103,3 @@ export const proxyCache = new Cache<PaidProxy[]>(CACHE_CONFIG.PROXY_CACHE_TTL);
 export const websiteCheckCache = new Cache<CheckResult[]>(
   CACHE_CONFIG.WEBSITE_CHECK_TTL
 );
-export const rateLimitCache = new Cache<number>(CACHE_CONFIG.RATE_LIMIT_TTL);
-
-// Helper function to get cache key for different contexts
-export function getCacheKey(_context: string, params: string[]): string {
-  return `${_context}:${params.sort().join(',')}`;
-}
-
-// Helper function to check if cache should be used
-export function shouldUseCache(context: string): boolean {
-  // Add logic here to determine if caching should be enabled
-  // For example, disable in development mode
-  return (
-    process.env.NODE_ENV === 'production' || process.env.ENABLE_CACHE === 'true'
-  );
-}

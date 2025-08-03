@@ -1,11 +1,15 @@
 import https from 'https';
 import axios from 'axios';
-import { PROXY_CONFIG } from '../constants/constants';
-import { PaidProxy } from '../types/types';
-import { ALL_COUNTRIES } from '../utils/countries';
-import { getWorkingWebshareProxies } from '../api/webshare-api';
-import { logProxyStatus, logProxyTesting, logBatchProcessing } from '../utils/utils';
-import { info, debug } from '../utils/logger';
+import { PROXY_CONFIG } from '@/constants/constants';
+import { PaidProxy } from '@/types/types';
+import { ALL_COUNTRIES } from '@/utils/countries';
+import { getWorkingWebshareProxies } from './webshare-api';
+import {
+  logProxyStatus,
+  logProxyTesting,
+  logBatchProcessing,
+} from '@/utils/utils';
+import { info, debug } from '@/utils/logger';
 
 export async function getPaidProxies(
   countries: string[] = []
@@ -56,9 +60,9 @@ export async function testPaidProxy(
     const auth =
       proxy.username && proxy.password
         ? {
-            username: proxy.username,
-            password: proxy.password,
-          }
+          username: proxy.username,
+          password: proxy.password,
+        }
         : undefined;
 
     // For Webshare proxies, we need to handle the authentication properly

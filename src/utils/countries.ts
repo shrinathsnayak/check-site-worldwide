@@ -1,11 +1,5 @@
 // Countries supported by Webshare proxy service
-export interface CountryInfo {
-  code: string;
-  name: string;
-  region: string;
-  continent: string;
-  supported: boolean; // Flag to indicate if supported by Webshare
-}
+import type { CountryInfo } from '@/types/types';
 
 // All available countries supported by Webshare (only countries with actual working proxies)
 export const ALL_COUNTRIES: CountryInfo[] = [

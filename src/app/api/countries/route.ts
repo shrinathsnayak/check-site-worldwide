@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import type { CountriesResponse } from '@/lib/types/types';
-import { ALL_COUNTRIES } from '@/lib/utils/countries';
-import { error } from '@/lib/utils/logger';
+import type { CountriesResponse } from '@/types/types';
+import { ALL_COUNTRIES } from '@/utils/countries';
+import { error } from '@/utils/logger';
 
 export async function GET() {
   try {

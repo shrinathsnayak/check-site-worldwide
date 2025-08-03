@@ -1,13 +1,13 @@
 // Centralized response handling functions
-import type { CheckResult, CheckSummary } from '../types/types';
-import { getCountryName, getRegionFromCountry } from '../utils/utils';
+import type { CheckResult, CheckSummary } from '@/types/types';
+import { getCountryName, getRegionFromCountry } from '@/utils/utils';
 
 // Helper function to create standardized error responses
 export function createErrorResponse(
   country: string,
   error: string,
   responseTime: number = 0
-): CheckResult & { usedCache: boolean } {
+): CheckResult {
   return {
     country,
     countryName: getCountryName(country),
@@ -17,7 +17,6 @@ export function createErrorResponse(
     statusCode: 0,
     error,
     timestamp: new Date().toISOString(),
-    usedCache: false,
   };
 }
 
@@ -25,9 +24,8 @@ export function createErrorResponse(
 export function createSuccessResponse(
   country: string,
   response: { status: number },
-  responseTime: number,
-  usedCache: boolean = false
-): CheckResult & { usedCache: boolean } {
+  responseTime: number
+): CheckResult {
   return {
     country,
     countryName: getCountryName(country),
@@ -36,7 +34,6 @@ export function createSuccessResponse(
     responseTime,
     statusCode: response.status,
     timestamp: new Date().toISOString(),
-    usedCache,
   };
 }
 
@@ -51,7 +48,7 @@ export function generateSummary(results: CheckResult[]): CheckSummary {
   const avgResponseTime =
     responseTimes.length > 0
       ? responseTimes.reduce((sum, time) => sum + time, 0) /
-        responseTimes.length
+      responseTimes.length
       : 0;
 
   return {

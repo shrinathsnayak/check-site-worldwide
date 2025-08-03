@@ -1,12 +1,12 @@
 import https from 'https';
 import axios, { AxiosRequestConfig } from 'axios';
 import { getWorkingProxyForCountry } from './paid-proxy-services';
-import type { CheckResult } from '../types/types';
-import { PROXY_CONFIG } from '../constants/constants';
-import { logRequestAttempt } from '../utils/utils';
-import { createErrorResponse, createSuccessResponse } from '../api/response';
-import { websiteCheckCache } from '../cache/cache';
-import { info, debug } from '../utils/logger';
+import type { CheckResult } from '@/types/types';
+import { PROXY_CONFIG } from '@/constants/constants';
+import { logRequestAttempt } from '@/utils/utils';
+import { createErrorResponse, createSuccessResponse } from '@/utils/response';
+import { websiteCheckCache } from '@/cache/cache';
+import { info, debug } from '@/utils/logger';
 
 // Function to check website accessibility from multiple countries in parallel
 export async function checkWebsiteFromCountries(
@@ -89,7 +89,7 @@ export async function checkWebsiteFromCountryInternal(
   url: string,
   country: string,
   timeout: number
-): Promise<CheckResult & { usedCache: boolean }> {
+): Promise<CheckResult> {
   const startTime = Date.now();
 
   try {
@@ -192,11 +192,10 @@ export async function checkWebsiteFromCountryInternal(
 
     clearTimeout(timeoutId);
     const responseTime = Date.now() - startTime;
-    const usedCache = responseTime < 3000; // If response time is very low, likely used cache
 
     // Check if response is successful (status 200-299)
     if (response.status >= 200 && response.status < 300) {
-      return createSuccessResponse(country, response, responseTime, usedCache);
+      return createSuccessResponse(country, response, responseTime);
     } else {
       return createErrorResponse(
         country,

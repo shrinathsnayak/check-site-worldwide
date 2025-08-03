@@ -1,14 +1,14 @@
-import { checkWebsiteFromCountries } from '@/lib/services/website-checker';
+import { checkWebsiteFromCountries } from '@/services/website-checker';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   validateUrl,
   validateCountries,
   validateTimeout,
-} from '@/lib/validation/validation';
-import { createErrorResponse } from '@/lib/validation/errors';
-import { ALL_COUNTRIES } from '@/lib/utils/countries';
-import { createApiResponse } from '@/lib/api/response';
-import { info, error } from '@/lib/utils/logger';
+} from '@/validation/validation';
+import { createErrorResponse } from '@/validation/errors';
+import { ALL_COUNTRIES } from '@/utils/countries';
+import { createApiResponse } from '@/utils/response';
+import { info, error } from '@/utils/logger';
 
 export async function GET(request: NextRequest) {
   try {

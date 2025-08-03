@@ -1,3 +1,5 @@
+// Logger constants
+import { LogLevel } from '@/types/types';
 // Proxy configuration constants - PAID PROXIES ONLY
 export const PROXY_CONFIG = {
   TEST_TIMEOUT: 3000, // Optimized for paid proxies
@@ -37,9 +39,6 @@ export const PAID_PROXY_CONFIG = {
   // Geographic targeting - will be populated from countries.ts
   targetCountries: [], // Will be populated dynamically
 } as const;
-
-// Logger constants
-import { LogLevel } from '../types/types';
 
 export const LOG_LEVEL_NAMES = {
   [LogLevel.DEBUG]: 'DEBUG',

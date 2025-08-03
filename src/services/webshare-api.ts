@@ -1,54 +1,11 @@
 // Webshare API integration for fetching real proxy lists
-import { PAID_PROXY_CONFIG } from '../constants/constants';
-import { PaidProxy } from '../types/types';
-import { getCountryByCode } from '../utils/countries';
-import { logProxyProcessing } from '../utils/utils';
-import { proxyCache } from '../cache/cache';
-import { info, error, debug } from '../utils/logger';
-
-// Function to validate IP address format
-function isValidIP(ip: string): boolean {
-  const ipRegex =
-    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-  return Boolean(ipRegex.test(ip));
-}
-
-// Function to validate proxy data
-function isValidProxy(proxy: WebshareProxy): boolean {
-  return (
-    proxy.valid &&
-    isValidIP(proxy.proxy_address) &&
-    proxy.port > 0 &&
-    proxy.port <= 65535 &&
-    proxy.username.length > 0 &&
-    proxy.password.length > 0 &&
-    proxy.country_code.length > 0
-  );
-}
-
-// Interface for Webshare API response
-interface WebshareProxy {
-  id: string;
-  username: string;
-  password: string;
-  proxy_address: string;
-  port: number;
-  valid: boolean;
-  last_verification: string;
-  country_code: string;
-  city_name: string;
-  asn_name: string;
-  asn_number: number;
-  high_country_confidence: boolean;
-  created_at: string;
-}
-
-interface WebshareApiResponse {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: WebshareProxy[];
-}
+import { PAID_PROXY_CONFIG } from '@/constants/constants';
+import type { PaidProxy, WebshareApiResponse } from '@/types/types';
+import { getCountryByCode } from '@/utils/countries';
+import { logProxyProcessing } from '@/utils/utils';
+import { proxyCache } from '@/cache/cache';
+import { info, error, debug } from '@/utils/logger';
+import { isValidProxy } from '@/validation/validation';
 
 // Function to fetch real proxy list from Webshare API
 export async function fetchWebshareProxies(
@@ -77,7 +34,7 @@ export async function fetchWebshareProxies(
     }
 
     // Webshare API endpoint with query parameters
-    const apiUrl = `https://proxy.webshare.io/api/v2/proxy/list/?${params.toString()}`;
+    const apiUrl = `${PAID_PROXY_CONFIG.baseUrl}/proxy/list/?${params.toString()}`;
 
     const response = await fetch(apiUrl, {
       method: 'GET',
@@ -175,14 +132,4 @@ export async function getWorkingWebshareProxies(
 
   logProxyProcessing(countries, proxies.length, 'Found working proxies');
   return proxies;
-}
-
-// Function to clear cache (useful for testing or manual refresh)
-export function clearWebshareCache(): void {
-  proxyCache.clear();
-}
-
-// Function to get cache stats
-export function getCacheStats(): { size: number; entries: string[] } {
-  return proxyCache.getStats();
 }

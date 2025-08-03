@@ -1,4 +1,4 @@
-import { SITEMAP_CONFIG } from '@/lib/constants/metadata';
+import { SITEMAP_CONFIG } from '@/constants/metadata';
 
 export default function sitemap() {
   const currentDate = new Date();

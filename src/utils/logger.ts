@@ -1,6 +1,6 @@
 // Centralized logging system
-import { LogLevel } from '../types/types';
-import type { LoggerConfig, LogEntry } from '../types/types';
+import { LogLevel } from '@/types/types';
+import type { LoggerConfig, LogEntry } from '@/types/types';
 import { LOG_LEVEL_NAMES, LOG_LEVEL_EMOJIS, LOGGER_CONFIG } from '../constants/constants';
 
 // Default configuration

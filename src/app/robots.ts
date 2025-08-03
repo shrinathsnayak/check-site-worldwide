@@ -1,4 +1,4 @@
-import { ROBOTS_CONFIG } from '@/lib/constants/metadata';
+import { ROBOTS_CONFIG } from '@/constants/metadata';
 
 export default function robots() {
   const currentDate = new Date().toISOString().split('T')[0];

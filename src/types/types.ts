@@ -28,6 +28,8 @@ export interface CountryInfo {
   code: string;
   name: string;
   region: string;
+  continent: string;
+  supported: boolean; // Flag to indicate if supported by Webshare
 }
 
 export interface CountriesResponse {
@@ -61,6 +63,13 @@ export interface PaidProxy {
   password?: string;
 }
 
+// Cache types
+export interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number; // Time to live in milliseconds
+}
+
 // Logger types
 export enum LogLevel {
   DEBUG = 0,
@@ -86,4 +95,28 @@ export interface LogEntry {
   context?: string;
   data?: unknown;
   error?: Error;
+}
+
+// Interface for Webshare API response
+export interface WebshareProxy {
+  id: string;
+  username: string;
+  password: string;
+  proxy_address: string;
+  port: number;
+  valid: boolean;
+  last_verification: string;
+  country_code: string;
+  city_name: string;
+  asn_name: string;
+  asn_number: number;
+  high_country_confidence: boolean;
+  created_at: string;
+}
+
+export interface WebshareApiResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: WebshareProxy[];
 }

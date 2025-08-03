@@ -1,3 +1,5 @@
+import { WebshareProxy } from "@/types/types";
+
 export function validateUrl(url: string): boolean {
   try {
     new URL(url);
@@ -38,4 +40,24 @@ export function validateCountries(
     countries: countries,
     invalidCountries,
   };
+}
+
+// Function to validate IP address format
+export function isValidIP(ip: string): boolean {
+  const ipRegex =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  return Boolean(ipRegex.test(ip));
+}
+
+// Function to validate proxy data
+export function isValidProxy(proxy: WebshareProxy): boolean {
+  return (
+    proxy.valid &&
+    isValidIP(proxy.proxy_address) &&
+    proxy.port > 0 &&
+    proxy.port <= 65535 &&
+    proxy.username.length > 0 &&
+    proxy.password.length > 0 &&
+    proxy.country_code.length > 0
+  );
 }
