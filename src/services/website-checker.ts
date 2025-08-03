@@ -1,6 +1,6 @@
 import https from 'https';
 import axios, { AxiosRequestConfig } from 'axios';
-import { getWorkingProxyForCountry } from './paid-proxy-services';
+import { getWorkingProxyForCountry } from './proxy-services';
 import type { CheckResult } from '@/types/types';
 import { PROXY_CONFIG } from '@/constants/constants';
 import { logRequestAttempt } from '@/utils/utils';
