@@ -1,4 +1,4 @@
-import { WebshareProxy } from "@/types/types";
+import { WebshareProxy } from '@/types/types';
 
 export function validateUrl(url: string): boolean {
   try {

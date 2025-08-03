@@ -60,9 +60,9 @@ export async function testPaidProxy(
     const auth =
       proxy.username && proxy.password
         ? {
-          username: proxy.username,
-          password: proxy.password,
-        }
+            username: proxy.username,
+            password: proxy.password,
+          }
         : undefined;
 
     // For Webshare proxies, we need to handle the authentication properly

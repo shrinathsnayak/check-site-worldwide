@@ -48,7 +48,7 @@ export function generateSummary(results: CheckResult[]): CheckSummary {
   const avgResponseTime =
     responseTimes.length > 0
       ? responseTimes.reduce((sum, time) => sum + time, 0) /
-      responseTimes.length
+        responseTimes.length
       : 0;
 
   return {

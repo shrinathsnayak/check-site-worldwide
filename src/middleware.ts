@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RATE_LIMIT_WINDOW, MAX_REQUESTS_PER_WINDOW } from '@/constants/constants';
+import {
+  RATE_LIMIT_WINDOW,
+  MAX_REQUESTS_PER_WINDOW,
+} from '@/constants/constants';
 
 // Simple in-memory rate limiting (in production, use Redis or similar)
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();

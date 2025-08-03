@@ -1,12 +1,14 @@
 import type { Metadata } from 'next';
 
 // Base URL configuration
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://checksiteworldwide.com';
+const BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL || 'https://checksiteworldwide.com';
 
 // Site information
 export const SITE_INFO = {
   name: 'Check Site Worldwide',
-  description: 'Check if your website is accessible from different countries around the world. Test website availability, response times, and accessibility from multiple geographic locations.',
+  description:
+    'Check if your website is accessible from different countries around the world. Test website availability, response times, and accessibility from multiple geographic locations.',
   url: BASE_URL,
   author: 'Check Site Worldwide',
   creator: 'Check Site Worldwide',
