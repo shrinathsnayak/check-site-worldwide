@@ -95,20 +95,20 @@ export async function checkWebsiteFromCountryInternal(
   try {
     info(`Starting check for ${country} with URL: ${url}`, 'website-check');
 
-    // Get a working paid proxy for this country
+    // Get a working proxy for this country
     const proxyString = await getWorkingProxyForCountry(country);
 
     // If no working proxy found, return not accessible
     if (!proxyString) {
-      debug(`No working paid proxy found for ${country}`, 'website-check');
+      debug(`No working proxy found for ${country}`, 'website-check');
       return createErrorResponse(
         country,
-        'No working paid proxy available for this country',
+        'No working proxy available for this country',
         Date.now() - startTime
       );
     }
 
-    info(`Using paid proxy ${proxyString} for ${country}`, 'website-check');
+    info(`Using proxy ${proxyString} for ${country}`, 'website-check');
 
     const requestConfig: AxiosRequestConfig = {
       timeout: Math.min(timeout, 15000), // Increased timeout for accuracy

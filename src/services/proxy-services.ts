@@ -10,6 +10,17 @@ import {
   logBatchProcessing,
 } from '@/utils/utils';
 import { info, debug } from '@/utils/logger';
+import { proxyCache } from '@/cache/cache';
+
+// Helper function to validate proxy authentication
+function hasValidAuthentication(proxy: PaidProxy): boolean {
+  return !!(
+    proxy.username &&
+    proxy.password &&
+    proxy.username.trim() !== '' &&
+    proxy.password.trim() !== ''
+  );
+}
 
 export async function getPaidProxies(
   countries: string[] = []
@@ -50,102 +61,165 @@ export async function testPaidProxy(
   proxy: PaidProxy,
   timeout: number = PROXY_CONFIG.FAST_FAIL_TIMEOUT
 ): Promise<boolean> {
-  const testUrl = 'http://httpbin.org/ip';
+  // Use multiple test URLs for better reliability
+  const testUrls = [
+    'https://httpbin.org/ip',
+    'https://api.ipify.org?format=json',
+    'https://ipinfo.io/json',
+  ];
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const maxRetries = PROXY_CONFIG.MAX_RETRIES;
+  const retryDelay = PROXY_CONFIG.RETRY_DELAY;
 
-    // Use authentication if available
-    const auth =
-      proxy.username && proxy.password
-        ? {
-            username: proxy.username,
-            password: proxy.password,
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    // Try different test URLs for each attempt
+    const testUrl = testUrls[(attempt - 1) % testUrls.length];
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      // Validate authentication credentials
+      if (!hasValidAuthentication(proxy)) {
+        debug(
+          `❌ Proxy ${proxy.host}:${proxy.port} has invalid authentication credentials`,
+          'paid-proxy-services'
+        );
+        return false;
+      }
+
+      // Use authentication if available
+      const auth = {
+        username: proxy.username!,
+        password: proxy.password!,
+      };
+
+      // For Webshare proxies, we need to handle the authentication properly
+      const proxyConfig = {
+        host: proxy.host,
+        port: proxy.port,
+        protocol: 'http', // Explicitly set protocol to HTTP
+        auth,
+      };
+
+      debug(
+        `Testing proxy: ${proxy.host}:${proxy.port} with auth: ${auth.username}:*** (attempt ${attempt}/${maxRetries + 1}, URL: ${testUrl})`,
+        'paid-proxy-services'
+      );
+
+      const response = await axios.get(testUrl, {
+        proxy: proxyConfig,
+        timeout,
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          Connection: 'keep-alive',
+        },
+        // Use default SSL settings for better compatibility
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false,
+        }),
+        // Additional settings for proxy compatibility
+        maxRedirects: 5,
+        validateStatus: status => status < 500, // Accept any status < 500
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.status === 200) {
+        // Verify we got a valid response (should contain IP information)
+        const responseData = response.data;
+        if (responseData && (responseData.origin || responseData.ip)) {
+          info(
+            `✅ Proxy ${proxy.host}:${proxy.port} passed test (attempt ${attempt}) - IP: ${responseData.origin || responseData.ip}`,
+            'paid-proxy-services'
+          );
+          return true;
+        } else {
+          debug(
+            `⚠️  Proxy ${proxy.host}:${proxy.port} returned 200 but invalid response data`,
+            'paid-proxy-services'
+          );
+          if (attempt <= maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
           }
-        : undefined;
-
-    // For Webshare proxies, we need to handle the authentication properly
-    const proxyConfig = {
-      host: proxy.host,
-      port: proxy.port,
-      protocol: 'http', // Explicitly set protocol to HTTP
-      ...(auth && { auth }),
-    };
-
-    debug(
-      `Testing proxy: ${proxy.host}:${proxy.port} with auth: ${!!auth}`,
-      'paid-proxy-services'
-    );
-
-    const response = await axios.get(testUrl, {
-      proxy: proxyConfig,
-      timeout,
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        Connection: 'keep-alive',
-      },
-      // Use default SSL settings for better compatibility
-      httpsAgent: new https.Agent({
-        rejectUnauthorized: false,
-      }),
-      // Additional settings for proxy compatibility
-      maxRedirects: 5,
-      validateStatus: status => status < 500, // Accept any status < 500
-    });
-
-    clearTimeout(timeoutId);
-
-    if (response.status === 200) {
-      info(
-        `✅ Paid proxy ${proxy.host}:${proxy.port} passed test`,
-        'paid-proxy-services'
-      );
-      return true;
-    } else if (response.status === 429) {
+          return false;
+        }
+      } else if (response.status === 429) {
+        debug(
+          `⚠️  Proxy ${proxy.host}:${proxy.port} rate limited (429) - attempt ${attempt}`,
+          'paid-proxy-services'
+        );
+        // Add delay for rate limiting
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (attempt <= maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+        return false;
+      } else if (response.status === 407) {
+        debug(
+          `❌ Proxy ${proxy.host}:${proxy.port} requires authentication (407) - attempt ${attempt}`,
+          'paid-proxy-services'
+        );
+        // Don't retry authentication errors - they won't work
+        return false;
+      } else {
+        debug(
+          `⚠️  Proxy ${proxy.host}:${proxy.port} returned status ${response.status} - attempt ${attempt}`,
+          'paid-proxy-services'
+        );
+        if (attempt <= maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+        return false;
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       debug(
-        `⚠️  Paid proxy ${proxy.host}:${proxy.port} rate limited (429)`,
+        `❌ Proxy ${proxy.host}:${proxy.port} failed test (attempt ${attempt}): ${errorMessage}`,
         'paid-proxy-services'
       );
-      // Add delay for rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      return false;
-    } else {
-      debug(
-        `⚠️  Paid proxy ${proxy.host}:${proxy.port} returned status ${response.status}`,
-        'paid-proxy-services'
-      );
-      return false;
-    }
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    debug(
-      `❌ Paid proxy ${proxy.host}:${proxy.port} failed test: ${errorMessage}`,
-      'paid-proxy-services'
-    );
 
-    // Log more details for debugging
-    if (errorMessage.includes('ENOTFOUND')) {
-      debug(
-        `   → DNS resolution failed for ${proxy.host}`,
-        'paid-proxy-services'
-      );
-    } else if (errorMessage.includes('ECONNREFUSED')) {
-      debug(
-        `   → Connection refused to ${proxy.host}:${proxy.port}`,
-        'paid-proxy-services'
-      );
-    } else if (errorMessage.includes('ETIMEDOUT')) {
-      debug(
-        `   → Connection timed out to ${proxy.host}:${proxy.port}`,
-        'paid-proxy-services'
-      );
+      // Log more details for debugging
+      if (errorMessage.includes('ENOTFOUND')) {
+        debug(
+          `   → DNS resolution failed for ${proxy.host}`,
+          'paid-proxy-services'
+        );
+      } else if (errorMessage.includes('ECONNREFUSED')) {
+        debug(
+          `   → Connection refused to ${proxy.host}:${proxy.port}`,
+          'paid-proxy-services'
+        );
+      } else if (errorMessage.includes('ETIMEDOUT')) {
+        debug(
+          `   → Connection timed out to ${proxy.host}:${proxy.port}`,
+          'paid-proxy-services'
+        );
+      }
+
+      // Retry logic for transient errors
+      if (attempt <= maxRetries) {
+        const isRetryableError =
+          errorMessage.includes('ETIMEDOUT') ||
+          errorMessage.includes('ECONNRESET') ||
+          errorMessage.includes('ENOTFOUND') ||
+          errorMessage.includes('ECONNREFUSED');
+
+        if (isRetryableError) {
+          debug(`   → Retrying in ${retryDelay}ms...`, 'paid-proxy-services');
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+      }
     }
   }
 
@@ -157,7 +231,15 @@ export async function getWorkingProxiesForCountry(
   country: string,
   maxProxies: number = PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY
 ): Promise<PaidProxy[]> {
-  // Get paid proxies for this country
+  // Check cache first for tested working proxies
+  const cacheKey = country;
+  const cachedWorkingProxies = proxyCache.get(cacheKey);
+  if (cachedWorkingProxies && cachedWorkingProxies.length > 0) {
+    logProxyStatus(country, cachedWorkingProxies.length);
+    return cachedWorkingProxies.slice(0, maxProxies);
+  }
+
+  // Get paid proxies for this country from API
   const paidProxies = await getPaidProxies([country]);
 
   logProxyStatus(country, paidProxies.length);
@@ -168,7 +250,124 @@ export async function getWorkingProxiesForCountry(
     .sort((a, b) => b.uptime - a.uptime)
     .slice(0, maxProxies);
 
-  return countryProxies;
+  if (countryProxies.length === 0) {
+    return [];
+  }
+
+  info(
+    `Testing ${countryProxies.length} paid proxies for ${country}:`,
+    'paid-proxy-services'
+  );
+  countryProxies.forEach((proxy, index) => {
+    info(
+      `  ${index + 1}. ${proxy.host}:${proxy.port} (uptime: ${proxy.uptime}%)`,
+      'paid-proxy-services'
+    );
+  });
+
+  // Test proxies in parallel batches for better performance
+  const concurrencyLimit = PROXY_CONFIG.MAX_CONCURRENT_PROXY_TESTS;
+  const workingProxies: PaidProxy[] = [];
+
+  for (let i = 0; i < countryProxies.length; i += concurrencyLimit) {
+    const batch = countryProxies.slice(i, i + concurrencyLimit);
+    const batchIndex = Math.floor(i / concurrencyLimit) + 1;
+    const totalBatches = Math.ceil(countryProxies.length / concurrencyLimit);
+    logBatchProcessing(batchIndex, totalBatches, batch);
+
+    const testPromises = batch.map(async (proxy, batchIndex) => {
+      const globalIndex = i + batchIndex + 1;
+
+      // Skip proxies without authentication
+      if (!hasValidAuthentication(proxy)) {
+        debug(
+          `⚠️ Skipping proxy ${proxy.host}:${proxy.port} - missing authentication`,
+          'paid-proxy-services'
+        );
+        logProxyTesting(proxy, globalIndex, countryProxies.length, 'failed');
+        return { proxy, isWorking: false };
+      }
+
+      logProxyTesting(proxy, globalIndex, countryProxies.length, 'testing');
+      const isWorking = await testPaidProxy(
+        proxy,
+        PROXY_CONFIG.FAST_FAIL_TIMEOUT
+      );
+      logProxyTesting(
+        proxy,
+        globalIndex,
+        countryProxies.length,
+        isWorking ? 'working' : 'failed'
+      );
+      return { proxy, isWorking };
+    });
+
+    const results = await Promise.allSettled(testPromises);
+
+    // Process batch results
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.isWorking) {
+        workingProxies.push(result.value.proxy);
+        // Stop testing if we found enough working proxies
+        if (workingProxies.length >= maxProxies) {
+          break;
+        }
+      }
+    }
+
+    // Stop if we found enough working proxies
+    if (workingProxies.length >= maxProxies) {
+      break;
+    }
+  }
+
+  // Cache the working proxies (not the raw API results)
+  if (workingProxies.length > 0) {
+    // Validate that all working proxies have proper authentication and were successfully tested
+    const validWorkingProxies = workingProxies.filter(proxy => {
+      const hasAuth = hasValidAuthentication(proxy);
+
+      if (!hasAuth) {
+        debug(
+          `⚠️ Skipping proxy ${proxy.host}:${proxy.port} - missing authentication credentials`,
+          'paid-proxy-services'
+        );
+        return false;
+      }
+
+      // Additional validation: ensure proxy has been successfully tested
+      if (!proxy.lastChecked) {
+        debug(
+          `⚠️ Skipping proxy ${proxy.host}:${proxy.port} - not properly tested`,
+          'paid-proxy-services'
+        );
+        return false;
+      }
+
+      return true;
+    });
+
+    if (validWorkingProxies.length > 0) {
+      // Update the lastChecked timestamp for cached proxies
+      const updatedProxies = validWorkingProxies.map(proxy => ({
+        ...proxy,
+        lastChecked: new Date().toISOString(),
+      }));
+
+      proxyCache.set(cacheKey, updatedProxies);
+      info(
+        `Found ${validWorkingProxies.length} working authenticated proxies for ${country}`,
+        'paid-proxy-services'
+      );
+    } else {
+      debug(
+        `⚠️ No working authenticated proxies found for ${country}`,
+        'paid-proxy-services'
+      );
+    }
+  }
+
+  return workingProxies;
 }
 
 // Function to get all available proxies for a country (paid proxies only)
@@ -192,92 +391,19 @@ export async function getWorkingProxyForCountry(
   country: string
 ): Promise<string | null> {
   try {
-    // Fetch paid proxies with timeout
-    const proxies = await getWorkingProxiesForCountry(
+    // Get working proxies (already tested and cached)
+    const workingProxies = await getWorkingProxiesForCountry(
       country,
       PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY
     );
 
-    if (proxies.length === 0) {
+    if (workingProxies.length === 0) {
       logProxyStatus(country, 0);
       return null;
     }
 
-    info(
-      `Testing ${proxies.length} paid proxies for ${country}:`,
-      'paid-proxy-services'
-    );
-    proxies.forEach((proxy, index) => {
-      info(
-        `  ${index + 1}. ${proxy.host}:${proxy.port} (uptime: ${proxy.uptime}%)`,
-        'paid-proxy-services'
-      );
-    });
-
-    // Test proxies in parallel batches for better performance
-    const concurrencyLimit = PROXY_CONFIG.MAX_CONCURRENT_PROXY_TESTS;
-    const workingProxies: PaidProxy[] = [];
-
-    for (let i = 0; i < proxies.length; i += concurrencyLimit) {
-      const batch = proxies.slice(i, i + concurrencyLimit);
-      const batchIndex = Math.floor(i / concurrencyLimit) + 1;
-      const totalBatches = Math.ceil(proxies.length / concurrencyLimit);
-      logBatchProcessing(batchIndex, totalBatches, batch);
-
-      const testPromises = batch.map(async (proxy, batchIndex) => {
-        const globalIndex = i + batchIndex + 1;
-        logProxyTesting(proxy, globalIndex, proxies.length, 'testing');
-        const isWorking = await testPaidProxy(
-          proxy,
-          PROXY_CONFIG.FAST_FAIL_TIMEOUT
-        );
-        logProxyTesting(
-          proxy,
-          globalIndex,
-          proxies.length,
-          isWorking ? 'working' : 'failed'
-        );
-        return { proxy, isWorking };
-      });
-
-      const results = await Promise.allSettled(testPromises);
-
-      // Process batch results
-      for (const result of results) {
-        if (result.status === 'fulfilled' && result.value.isWorking) {
-          workingProxies.push(result.value.proxy);
-          // Stop testing if we found enough working proxies
-          if (workingProxies.length >= 3) {
-            info(
-              `Found ${workingProxies.length} working proxies, stopping tests`,
-              'paid-proxy-services'
-            );
-            break;
-          }
-        }
-      }
-
-      // If we found enough working proxies, stop testing
-      if (workingProxies.length >= 3) {
-        break;
-      }
-    }
-
-    if (workingProxies.length === 0) {
-      logProxyStatus(country, proxies.length, false);
-      return null;
-    }
-
-    // Sort by uptime and return the best proxy
-    workingProxies.sort((a, b) => b.uptime - a.uptime);
+    // Return the best proxy with authentication details (already sorted by uptime)
     const bestProxy = workingProxies[0];
-    logProxyStatus(country, proxies.length, true);
-    info(
-      `Found working paid proxy ${bestProxy.host}:${bestProxy.port} for ${country}`,
-      'paid-proxy-services'
-    );
-
-    // Return proxy info as JSON string with authentication
     return JSON.stringify({
       host: bestProxy.host,
       port: bestProxy.port,
@@ -287,7 +413,7 @@ export async function getWorkingProxyForCountry(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
     debug(
-      `Error getting working paid proxy for ${country}: ${errorMessage}`,
+      `Failed to get working proxy for ${country}: ${errorMessage}`,
       'paid-proxy-services'
     );
     return null;

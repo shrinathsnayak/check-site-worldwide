@@ -36,7 +36,13 @@ export interface CountriesResponse {
   success: boolean;
   resultsByRegion: Record<
     string,
-    Array<{ code: string; name: string; continent: string; supported: boolean }>
+    Array<{
+      code: string;
+      name: string;
+      continent: string;
+      supported: boolean;
+      flag: string;
+    }>
   >;
 }
 

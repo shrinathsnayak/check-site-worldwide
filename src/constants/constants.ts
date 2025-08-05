@@ -2,10 +2,10 @@
 import { LogLevel } from '@/types/types';
 // Proxy configuration constants - PAID PROXIES ONLY
 export const PROXY_CONFIG = {
-  TEST_TIMEOUT: 3000, // Optimized for paid proxies
-  MAX_PROXIES_PER_COUNTRY: 1, // Fewer needed with paid proxies
-  MAX_CONCURRENT_PROXY_TESTS: 20, // Optimized for paid proxies
-  MAX_CONCURRENT_COUNTRY_CHECKS: 20, // Lowered for Brightdata rate limiting
+  TEST_TIMEOUT: 5000, // Increased from 3000ms to 5000ms for better reliability
+  MAX_PROXIES_PER_COUNTRY: 3, // Increased from 1 to 3 for better fallback options
+  MAX_CONCURRENT_PROXY_TESTS: 10, // Reduced from 20 to avoid overwhelming
+  MAX_CONCURRENT_COUNTRY_CHECKS: 10, // Reduced for better stability
   PROXY_TEST_URL: 'http://httpbin.org/ip',
   // Request headers for better compatibility
   USER_AGENT: 'Check-Site-Worldwide/1.0', // Updated for project rename
@@ -14,10 +14,13 @@ export const PROXY_CONFIG = {
   ACCEPT_ENCODING: 'gzip, deflate',
   CONNECTION: 'keep-alive',
   UPGRADE_INSECURE_REQUESTS: '1',
-  // Paid proxy optimizations
+  // Proxy optimizations
   SKIP_PROXY_TEST_ON_CACHE_HIT: true, // Paid proxies are reliable
-  MAX_PROXY_SEARCH_TIME: 5000, // Faster search for paid proxies
-  FAST_FAIL_TIMEOUT: 3000, // Faster failure detection
+  MAX_PROXY_SEARCH_TIME: 8000, // Increased from 5000ms to 8000ms
+  FAST_FAIL_TIMEOUT: 4000, // Increased from 3000ms to 4000ms
+  // Retry configuration
+  MAX_RETRIES: 2, // Add retry logic for failed proxies
+  RETRY_DELAY: 1000, // 1 second delay between retries
   // Cache settings
   CACHE_PREFIX: 'paid_proxy',
   CACHE_TTL: 3600, // 1 hour cache TTL
@@ -27,7 +30,7 @@ export const PROXY_CONFIG = {
 export const RATE_LIMIT_WINDOW = 60000; // 1 minute window
 export const MAX_REQUESTS_PER_WINDOW = 10; // Max requests per window
 
-// Paid proxy service configuration - WEBSHARE
+// Proxy service configuration - WEBSHARE
 export const PAID_PROXY_CONFIG = {
   service: 'webshare', // Using Webshare proxy service
   apiKey: process.env.WEBSHARE_API_KEY || '',

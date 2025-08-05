@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { CountriesResponse } from '@/types/types';
 import { ALL_COUNTRIES } from '@/utils/countries';
 import { error } from '@/utils/logger';
+import { getCountryFlagFromISOCode } from '@/utils/utils';
 
 export async function GET() {
   try {
@@ -16,6 +17,7 @@ export async function GET() {
           name: country.name,
           continent: country.continent,
           supported: country.supported,
+          flag: getCountryFlagFromISOCode(country.code),
         });
         return acc;
       },
@@ -26,6 +28,7 @@ export async function GET() {
           name: string;
           continent: string;
           supported: boolean;
+          flag: string;
         }>
       >
     );

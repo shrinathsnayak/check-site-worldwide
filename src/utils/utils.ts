@@ -41,7 +41,7 @@ export function logProxyStatus(
   if (proxyCount === 0) {
     warn(`❌ No Webshare proxies available for ${country}`, 'proxy-status');
   } else if (!hasWorkingProxy) {
-    warn(`⚠️  No working paid proxy found for ${country}`, 'proxy-status');
+    warn(`⚠️  No working proxy found for ${country}`, 'proxy-status');
   } else {
     info(`✅ Found working proxy for ${country}`, 'proxy-status');
   }
@@ -110,4 +110,17 @@ export function getCountryName(country: string): string {
 export function getRegionFromCountry(country: string): string {
   const countryInfo = getCountryByCode(country);
   return countryInfo?.region || 'Unknown';
+}
+
+export function getCountryFlagFromISOCode(country: string): string {
+  if (!country || country.length !== 2) {
+    return '🏳️';
+  }
+
+  const codePoints = country
+    .toUpperCase()
+    .split('')
+    .map(char => char.charCodeAt(0) - 65 + 0x1f1e6);
+
+  return String.fromCodePoint(...codePoints);
 }

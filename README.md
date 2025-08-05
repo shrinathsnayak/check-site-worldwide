@@ -258,6 +258,62 @@ curl "http://localhost:3000/api/countries"
 }
 ```
 
+### Cache Management
+
+**Endpoint:** `POST /api/cache/clear`
+
+**Description:** Clear all caches (proxy cache and website check cache) to force fresh data fetching
+
+**Example Request:**
+```bash
+curl -X POST "http://localhost:3000/api/cache/clear"
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "message": "All caches cleared successfully",
+  "data": {
+    "cleared": true,
+    "cachesCleared": ["proxy", "website-check"],
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+**Endpoint:** `GET /api/cache/clear`
+
+**Description:** Get comprehensive cache statistics for both proxy and website check caches
+
+**Example Request:**
+```bash
+curl "http://localhost:3000/api/cache/clear"
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "message": "Cache statistics retrieved",
+  "data": {
+    "proxy": {
+      "size": 3,
+      "entries": ["US", "ES", "PL"]
+    },
+    "websiteCheck": {
+      "size": 2,
+      "entries": ["https://google.com:US,ES", "https://example.com:PL"]
+    },
+    "total": {
+      "size": 5,
+      "entries": ["US", "ES", "PL", "https://google.com:US,ES", "https://example.com:PL"]
+    },
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
 ## 🏗️ Project Structure
 
 ```
