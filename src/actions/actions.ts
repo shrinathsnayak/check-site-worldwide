@@ -1,88 +1,46 @@
 'use server';
 
-import { checkWebsiteFromCountries } from '@/services/website-checker';
-import {
-  validateUrl,
-  validateTimeout,
-  validateCountries,
-} from '@/validation/validation';
-import { ALL_COUNTRIES } from '@/utils/countries';
-import { createApiResponse } from '@/utils/response';
 import type { CheckResponse } from '@/types/types';
 import { MOCK_CHECK_RESPONSE } from '@/mocks/checkResponse';
-
-export async function checkWebsiteAction(
-  formData: FormData
-): Promise<CheckResponse> {
-  const url = formData.get('url') as string;
-
-  if (!url) {
-    throw new Error('URL is required');
-  }
-
-  if (!validateUrl(url)) {
-    throw new Error('Invalid URL format');
-  }
-
-  // Check website from all countries
-  const results = await checkWebsiteFromCountries(
-    url,
-    ALL_COUNTRIES.map(country => country.code),
-    30000 // 30 second timeout
-  );
-
-  // Create API response
-  return createApiResponse(url, results);
-}
+import { headers } from 'next/headers';
 
 export async function getCheckResults(params: {
   url: string;
   countries?: string; // comma separated
-  timeout?: string; // ms
   mock?: string; // '1' to enable mock
-  mode?: 'quick' | 'full';
 }): Promise<CheckResponse> {
-  const {
-    url,
-    countries: countriesParam,
-    timeout: timeoutParam,
-    mock,
-    mode,
-  } = params;
+  const { url, countries: countriesParam, mock } = params;
 
   if (!url) {
     throw new Error('URL parameter is required');
-  }
-
-  if (!validateUrl(url)) {
-    throw new Error('Invalid URL format');
   }
 
   if (mock === '1') {
     return { ...MOCK_CHECK_RESPONSE, url } as CheckResponse;
   }
 
-  const supportedCountries = ALL_COUNTRIES.map(c => c.code);
-  const { isValid, countries, invalidCountries } = validateCountries(
-    countriesParam ?? null,
-    supportedCountries
-  );
-  if (!isValid) {
-    throw new Error(`Unsupported countries: ${invalidCountries.join(', ')}`);
+  const h = await headers();
+  const host = h.get('x-forwarded-host') || h.get('host') || 'localhost:3000';
+  const proto = h.get('x-forwarded-proto') || 'http';
+  const origin = `${proto}://${host}`;
+
+  const qs = new URLSearchParams();
+  qs.set('url', url);
+  if (countriesParam) qs.set('countries', countriesParam);
+  // timeout and mode removed from API layer
+
+  const res = await fetch(`${origin}/api/check?${qs.toString()}`.toString(), {
+    next: { revalidate: 60 * 60 },
+  });
+
+  if (!res.ok) {
+    let message = `Request failed with status ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body?.message || body?.error || message;
+    } catch { }
+    throw new Error(message);
   }
 
-  const finalCountries = countries.length > 0 ? countries : supportedCountries;
-  const timeout = validateTimeout(timeoutParam ?? null);
-
-  const useHead = mode === 'quick';
-  const results = await checkWebsiteFromCountries(
-    url,
-    finalCountries,
-    timeout,
-    {
-      useHead,
-      maxRedirects: useHead ? 0 : 5,
-    }
-  );
-  return createApiResponse(url, results);
+  return (await res.json()) as CheckResponse;
 }

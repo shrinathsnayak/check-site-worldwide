@@ -1,10 +1,6 @@
 import { checkWebsiteFromCountries } from '@/services/website-checker';
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  validateUrl,
-  validateCountries,
-  validateTimeout,
-} from '@/validation/validation';
+import { validateUrl, validateCountries } from '@/validation/validation';
 import { createErrorResponse } from '@/validation/errors';
 import { ALL_COUNTRIES } from '@/utils/countries';
 import { createApiResponse } from '@/utils/response';
@@ -16,8 +12,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
     const countriesParam = searchParams.get('countries');
-    const timeoutParam = searchParams.get('timeout');
-    const modeParam = searchParams.get('mode');
+    // timeout and mode are no longer accepted via API
 
     // Validate required parameters
     if (!url) {
@@ -57,8 +52,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Parse and validate timeout
-    const timeout = validateTimeout(timeoutParam);
+    // Use a sensible default timeout for all checks
+    const timeout = 10000; // 10 seconds
 
     // If no countries specified, use all available countries
     const targetCountries =
@@ -72,14 +67,13 @@ export async function GET(request: NextRequest) {
     );
 
     // Check website accessibility from all specified countries
-    const useHead = modeParam === 'quick';
     const results = await checkWebsiteFromCountries(
       url,
       targetCountries,
       timeout,
       {
-        useHead,
-        maxRedirects: useHead ? 0 : 5,
+        useHead: true,
+        maxRedirects: 0,
       }
     );
 

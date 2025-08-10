@@ -48,7 +48,7 @@ export function generateSummary(results: CheckResult[]): CheckSummary {
   const avgResponseTime =
     responseTimes.length > 0
       ? responseTimes.reduce((sum, time) => sum + time, 0) /
-        responseTimes.length
+      responseTimes.length
       : 0;
 
   return {
@@ -75,6 +75,8 @@ export function groupResultsByRegion(
     {} as Record<string, CheckResult[]>
   );
 }
+
+// reason and other extended fields removed
 
 // Function to create API response object
 export function createApiResponse(

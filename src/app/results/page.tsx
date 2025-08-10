@@ -1,5 +1,4 @@
-import { Container, Title, Alert, Group, Badge, Box } from '@mantine/core';
-import type { CheckResponse } from '@/types/types';
+import { Container, Title, Alert, Group, Box, Badge } from '@mantine/core';
 import PageLayout from '@/components/shared/PageLayout';
 import { validateUrl } from '@/validation/validation';
 import ResultsByRegion from '@/components/results/ResultsByRegion';
@@ -11,16 +10,14 @@ export default async function ResultsPage({
   searchParams: Promise<{
     url?: string;
     countries?: string;
-    timeout?: string;
     mock?: string;
   }>;
 }) {
   const sp = await searchParams;
   const urlParam = sp.url ?? '';
   const countriesParam = sp.countries ?? '';
-  const timeoutParam = sp.timeout ?? '';
   const mockParam = sp.mock ?? '';
-  const modeParam = (sp as any).mode ?? '';
+  // mode no longer supported
 
   if (!urlParam || !validateUrl(urlParam)) {
     return (
@@ -34,16 +31,14 @@ export default async function ResultsPage({
     );
   }
 
-  let data: CheckResponse | null = null;
+  let data: import('@/types/types').CheckResponse | null = null;
   let errorMessage: string | null = null;
 
   try {
     data = await getCheckResults({
       url: urlParam,
       countries: countriesParam,
-      timeout: timeoutParam,
       mock: mockParam,
-      mode: modeParam === 'quick' ? 'quick' : undefined,
     });
   } catch (e) {
     errorMessage = e instanceof Error ? e.message : 'Unknown error';

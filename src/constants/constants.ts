@@ -2,7 +2,7 @@
 import { LogLevel } from '@/types/types';
 // Proxy configuration constants - PAID PROXIES ONLY
 export const PROXY_CONFIG = {
-  TEST_TIMEOUT: 7000,
+  TEST_TIMEOUT: 12000,
   MAX_PROXIES_PER_COUNTRY: 3,
   MAX_CONCURRENT_PROXY_TESTS: 10,
   MAX_CONCURRENT_COUNTRY_CHECKS: 15,
@@ -17,7 +17,10 @@ export const PROXY_CONFIG = {
   // Proxy optimizations
   SKIP_PROXY_TEST_ON_CACHE_HIT: true,
   MAX_PROXY_SEARCH_TIME: 10000,
-  FAST_FAIL_TIMEOUT: 6000,
+  // Increased timeouts for more reliable validation
+  FAST_FAIL_TIMEOUT: 12000,
+  SOFT_TEST_TIMEOUT: 4000,
+  FULL_TEST_TIMEOUT: 15000,
   // Retry configuration
   MAX_RETRIES: 2, // Add retry logic for failed proxies
   RETRY_DELAY: 1000, // 1 second delay between retries
@@ -25,6 +28,9 @@ export const PROXY_CONFIG = {
   CACHE_PREFIX: 'paid_proxy',
   CACHE_TTL: 3600, // 1 hour cache TTL
 } as const;
+
+// IP metadata cache
+export const IP_GEO_CACHE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 
 // Rate limiting configuration
 export const RATE_LIMIT_WINDOW = 60000; // 1 minute window

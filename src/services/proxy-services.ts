@@ -69,14 +69,40 @@ export async function seedWorkingProxiesForCountries(
 
       info(`Seed: testing ${list.length} proxies for ${country}`, 'paid-proxy-services');
 
-      const results = await Promise.all(
-        list.map(proxy =>
-          testPaidProxy(proxy, PROXY_CONFIG.FAST_FAIL_TIMEOUT).then(ok => ({
-            proxy,
-            ok,
-          }))
-        )
+      // Queue-based validation: quickly enqueue slow tests and continue with others
+      const pendingQueue: PaidProxy[] = [];
+      const quickTimeout = PROXY_CONFIG.SOFT_TEST_TIMEOUT || 4000;
+
+      const results: Array<{ proxy: PaidProxy; ok: boolean }> = await Promise.all(
+        list.map(async proxy => {
+          // First, attempt a quick validation; if it times out, move to queue
+          const quickPass = await Promise.race([
+            testPaidProxy(proxy, quickTimeout),
+            new Promise<boolean>(resolve =>
+              setTimeout(() => resolve(false), quickTimeout + 50)
+            ),
+          ]);
+          if (quickPass) return { proxy, ok: true } as const;
+          pendingQueue.push(proxy);
+          return { proxy, ok: false } as const;
+        })
       );
+
+      // Process queued (slow) proxies with increased timeout, stop early when target reached
+      const targetCount = Math.min(maxPerCountry, list.length);
+      let workingCount = results.filter(r => r.ok).length;
+      for (const queued of pendingQueue) {
+        if (workingCount >= targetCount) break;
+        const ok = await testPaidProxy(
+          queued,
+          PROXY_CONFIG.FULL_TEST_TIMEOUT || PROXY_CONFIG.FAST_FAIL_TIMEOUT
+        );
+        const idx = results.findIndex(r => r.proxy === queued);
+        if (idx >= 0) {
+          (results as Array<{ proxy: PaidProxy; ok: boolean }>)[idx].ok = ok;
+          if (ok) workingCount += 1;
+        }
+      }
 
       const working = results.filter(r => r.ok).map(r => r.proxy);
       if (working.length > 0) {

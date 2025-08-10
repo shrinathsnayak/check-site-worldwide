@@ -7,6 +7,7 @@ import {
 } from './proxy-services';
 import type { CheckResult } from '@/types/types';
 import { PROXY_CONFIG } from '@/constants/constants';
+import { getRegionFromCountry } from '@/utils/utils';
 import { logRequestAttempt } from '@/utils/utils';
 import { createErrorResponse, createSuccessResponse } from '@/utils/response';
 // remove in-memory result cache; UI will handle response caching client-side
@@ -22,7 +23,8 @@ export async function checkWebsiteFromCountries(
   url: string,
   countries: string[],
   timeout: number,
-  options: CheckOptions = {}
+  options: CheckOptions = {},
+  onResult?: (result: CheckResult) => void
 ): Promise<CheckResult[]> {
   // No server-side result cache; UI may cache responses client-side
 
@@ -34,20 +36,45 @@ export async function checkWebsiteFromCountries(
   // Ensure working proxies are seeded with a single upstream API call
   await seedWorkingProxiesForCountries(countries);
 
+  // Reorder countries to interleave regions (round-robin) for faster region coverage
+  const byRegion = new Map<string, string[]>();
+  for (const c of countries) {
+    const r = getRegionFromCountry(c) || 'Unknown';
+    const arr = byRegion.get(r) || [];
+    arr.push(c);
+    byRegion.set(r, arr);
+  }
+  const buckets = Array.from(byRegion.values());
+  const interleaved: string[] = [];
+  let exhausted = false;
+  let idx = 0;
+  while (!exhausted) {
+    exhausted = true;
+    for (const bucket of buckets) {
+      if (idx < bucket.length) {
+        interleaved.push(bucket[idx]);
+        exhausted = false;
+      }
+    }
+    idx++;
+  }
+  const orderedCountries = interleaved.length === countries.length ? interleaved : countries.slice();
+
   // Process all countries in parallel with a dynamic concurrency limit
   const hostname = new URL(url).hostname.toLowerCase();
-  let concurrencyLimit: number = PROXY_CONFIG.MAX_CONCURRENT_COUNTRY_CHECKS as number;
+  let currentConcurrency: number = PROXY_CONFIG.MAX_CONCURRENT_COUNTRY_CHECKS as number;
   // Reduce pressure for highly rate-limited targets like Google
   if (hostname === 'google.com' || hostname === 'www.google.com') {
-    concurrencyLimit = Math.min(concurrencyLimit, 5);
+    currentConcurrency = Math.min(currentConcurrency, 5);
   }
   const results: CheckResult[] = [];
+  let rateLimitedObserved = false;
 
-  // Process countries in batches to control concurrency
-  for (let i = 0; i < countries.length; i += concurrencyLimit) {
-    const batch = countries.slice(i, i + concurrencyLimit);
+  // Process countries in batches to control concurrency (dynamic)
+  for (let i = 0; i < orderedCountries.length;) {
+    const batch = orderedCountries.slice(i, i + currentConcurrency);
     info(
-      `Processing batch ${Math.floor(i / concurrencyLimit) + 1}: ${batch.join(', ')}`,
+      `Processing batch ${Math.floor(i / currentConcurrency) + 1}: ${batch.join(', ')}`,
       'website-check'
     );
 
@@ -86,13 +113,25 @@ export async function checkWebsiteFromCountries(
     for (const result of batchResults) {
       if (result.status === 'fulfilled') {
         results.push(result.value);
+        try {
+          onResult?.(result.value);
+        } catch { }
       } else {
         debug(`Batch promise rejected: ${result.reason}`, 'website-check');
       }
     }
 
+    // Adjust concurrency if we see signs of rate limiting
+    const saw429 = results.slice(-batch.length).some(r => (r.error || '').includes('429'));
+    if (saw429 && !rateLimitedObserved) {
+      rateLimitedObserved = true;
+      currentConcurrency = Math.max(3, Math.floor(currentConcurrency / 2));
+      info(`Rate limiting observed. Reducing concurrency to ${currentConcurrency}`, 'website-check');
+    }
+
     // Reduce or remove inter-batch delay to accelerate checks
     // If you observe upstream rate-limiting, consider reintroducing a small delay (e.g., 500ms)
+    i += batch.length;
   }
 
   info(
@@ -212,7 +251,10 @@ export async function checkWebsiteFromCountryInternal(
       const method = options.useHead ? 'HEAD' : 'GET';
       const maxRedirects = options.maxRedirects ?? (options.useHead ? 0 : 5);
 
-      let response;
+      let response: any;
+      let protocolUsed: 'https' | 'http' = 'https';
+      let retryAfterMs: number | undefined;
+      let timings: { start: number; dns?: number; tcp?: number; tls?: number; ttfb?: number } = { start: Date.now() };
       try {
         debug(`Trying HTTPS ${method} to ${url}`, 'website-check');
         response = await axios.request({
@@ -225,29 +267,53 @@ export async function checkWebsiteFromCountryInternal(
             keepAlive: true,
           }),
           maxRedirects,
-          validateStatus: status => status < 500,
-        });
+          validateStatus: (status: number) => status < 500,
+          // onDownloadProgress doesn't fire in Node for HEAD; use request timing hooks via adapter options if available
+          transitional: { clarifyTimeoutError: true },
+        } as any);
         logRequestAttempt(url, 'HTTPS', 'success');
       } catch (httpsError) {
+        const errMessage = (httpsError as Error).message.toLowerCase();
         logRequestAttempt(
           url,
           'HTTPS',
           'failed',
           (httpsError as Error).message
         );
-        debug(
-          `Trying HTTP ${method} to ${url.replace('https://', 'http://')}`,
-          'website-check'
-        );
-        response = await axios.request({
-          url: url.replace('https://', 'http://'),
-          method,
-          ...localReqConfig,
-          signal: controller.signal,
-          maxRedirects,
-          validateStatus: status => status < 500,
-        });
-        logRequestAttempt(url, 'HTTP', 'success');
+        // Dynamic fallback: for typical HEAD-block patterns (405/403 or method not allowed), retry with GET
+        const isHeadNotAllowed = errMessage.includes('405') || errMessage.includes('method') || errMessage.includes('not allowed');
+        if (options.useHead && isHeadNotAllowed) {
+          debug(`HEAD blocked for ${url}. Retrying with GET.`, 'website-check');
+          response = await axios.request({
+            url,
+            method: 'GET',
+            ...localReqConfig,
+            signal: controller.signal,
+            httpsAgent: new https.Agent({
+              rejectUnauthorized: false,
+              keepAlive: true,
+            }),
+            maxRedirects,
+            validateStatus: (status: number) => status < 500,
+            transitional: { clarifyTimeoutError: true },
+          } as any);
+        } else {
+          debug(
+            `Trying HTTP ${method} to ${url.replace('https://', 'http://')}`,
+            'website-check'
+          );
+          response = await axios.request({
+            url: url.replace('https://', 'http://'),
+            method,
+            ...localReqConfig,
+            signal: controller.signal,
+            maxRedirects,
+            validateStatus: (status: number) => status < 500,
+            transitional: { clarifyTimeoutError: true },
+          } as any);
+          logRequestAttempt(url, 'HTTP', 'success');
+          protocolUsed = 'http';
+        }
       }
 
       // 429 backoff and single retry
@@ -257,6 +323,7 @@ export async function checkWebsiteFromCountryInternal(
         const retryMs = retryAfterHeader
           ? Math.min(parseInt(retryAfterHeader) * 1000, 2000)
           : 1000 + Math.floor(Math.random() * 500);
+        retryAfterMs = retryMs;
         await new Promise(resolve => setTimeout(resolve, retryMs));
         try {
           response = await axios.request({
@@ -297,6 +364,7 @@ export async function checkWebsiteFromCountryInternal(
       if (isSuccess) {
         const success = createSuccessResponse(country, response, responseTime);
         if (usedIp) (success as any).usedIp = usedIp;
+        // extended enrichment removed
         return success;
       }
 
@@ -306,6 +374,7 @@ export async function checkWebsiteFromCountryInternal(
         responseTime
       );
       if (usedIp) (errorResult as any).usedIp = usedIp;
+      // extended enrichment removed
       return errorResult;
     };
 
@@ -342,3 +411,5 @@ export async function checkWebsiteFromCountryInternal(
     return createErrorResponse(country, errorMessage, responseTime);
   }
 }
+
+// extended enrichment helpers removed
