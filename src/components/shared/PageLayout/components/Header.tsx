@@ -1,8 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import NextImage from 'next/image';
-import { Anchor, AppShell, Container, Flex, Image, Title } from '@mantine/core';
-// import { PUBLIC_IMAGES } from "@/constants";
+import { Anchor, AppShell, Container, Flex, Title } from '@mantine/core';
 
 const Header = () => {
   return (
@@ -29,15 +27,6 @@ const Header = () => {
           w='min-content'
         >
           <Flex align='center' justify='center' py='md' gap={10}>
-            {/* <Image
-              width={30}
-              height={30}
-              radius="sm"
-              priority={true}
-              component={NextImage}
-              src={PUBLIC_IMAGES.FAVICON}
-              alt="validate.email logo"
-            /> */}
             <Title order={3} c='white'>
               checksiteworldwide.com
             </Title>
