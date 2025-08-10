@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import { ColorSchemeScript } from '@mantine/core';
 import { Providers } from '../components/providers';
 import { METADATA } from '@/constants/metadata';
+import Metrics from '@/observability';
 
 export const metadata: Metadata = METADATA;
 
@@ -24,11 +25,7 @@ export default function RootLayout({
         <meta name='theme-color' content='#000000' />
         <meta name='color-scheme' content='light dark' />
         <ColorSchemeScript defaultColorScheme='dark' forceColorScheme='dark' />
-        <script
-          defer
-          data-domain='checksiteworldwide.com'
-          src='https://plausible-analytics-ce-production-8993.up.railway.app/js/script.hash.outbound-links.pageview-props.tagged-events.js'
-        ></script>
+        <Metrics />
       </head>
       <body suppressHydrationWarning={true} className='root'>
         <Providers>{children}</Providers>
