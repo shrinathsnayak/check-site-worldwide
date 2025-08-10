@@ -7,3 +7,27 @@
     font-size: var(--mantine-font-size-md);
   }
 }
+
+.inputWrapper {
+  width: 100%;
+}
+
+.desktopButton {
+  display: block;
+}
+
+.mobileButton {
+  display: none;
+  width: 100%;
+}
+
+@media (max-width: em(750px)) {
+  .desktopButton {
+    display: none;
+  }
+
+  .mobileButton {
+    display: block;
+    margin-top: var(--mantine-spacing-xs);
+  }
+}
