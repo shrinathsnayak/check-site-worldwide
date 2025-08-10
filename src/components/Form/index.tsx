@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Flex, Input, Box } from '@mantine/core';
+import { Flex, TextInput, Box } from '@mantine/core';
 import { useForm } from '@mantine/form';
 
 // Components Imports
@@ -31,11 +31,11 @@ const Form = () => {
     <Box>
       <form onSubmit={form.onSubmit(values => handleFormSubmission(values))}>
         <Flex align='center' justify='center' w='100%'>
-          <Input
+          <TextInput
             size='lg'
             radius='md'
             w={{ base: '100%', sm: '70%' }}
-            placeholder='Enter your website URL'
+            placeholder='Enter your website URL with https://'
             classNames={{ section: classes.section, input: classes.input }}
             rightSection={<SubmitButton />}
             rightSectionPointerEvents='auto'
