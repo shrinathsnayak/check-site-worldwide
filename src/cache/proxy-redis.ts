@@ -14,7 +14,10 @@ export async function getAllWorkingProxiesFromRedis(): Promise<PaidProxy[]> {
     const key = allWorkingKey();
     const value = await redis.get<PaidProxy[]>(key);
     if (value && Array.isArray(value)) {
-      info(`📦 (Redis) Loaded ${value.length} working proxies (all)`, 'redis-cache');
+      info(
+        `📦 (Redis) Loaded ${value.length} working proxies (all)`,
+        'redis-cache'
+      );
       return value as PaidProxy[];
     }
     return [];
@@ -109,5 +112,3 @@ export async function setAllWorkingProxies(
     );
   }
 }
-
-

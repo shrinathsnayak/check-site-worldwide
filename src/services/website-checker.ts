@@ -5,6 +5,7 @@ import {
   getWorkingProxiesForCountry,
   seedWorkingProxiesForCountries,
 } from './proxy-services';
+import { getAllWorkingProxiesFromRedis } from '@/cache/proxy-redis';
 import type { CheckResult } from '@/types/types';
 import { PROXY_CONFIG } from '@/constants/constants';
 import { getRegionFromCountry } from '@/utils/utils';
@@ -33,8 +34,13 @@ export async function checkWebsiteFromCountries(
     'website-check'
   );
 
-  // Ensure working proxies are seeded with a single upstream API call
-  await seedWorkingProxiesForCountries(countries);
+  // Ensure working proxies are seeded with a single upstream API call, and preload once
+  const seeded = await seedWorkingProxiesForCountries(countries);
+  // If seeding returned nothing (likely already primed), read once from Redis
+  const preloadedAll =
+    seeded && seeded.length > 0
+      ? seeded
+      : await getAllWorkingProxiesFromRedis();
 
   // Reorder countries to interleave regions (round-robin) for faster region coverage
   const byRegion = new Map<string, string[]>();
@@ -58,11 +64,13 @@ export async function checkWebsiteFromCountries(
     }
     idx++;
   }
-  const orderedCountries = interleaved.length === countries.length ? interleaved : countries.slice();
+  const orderedCountries =
+    interleaved.length === countries.length ? interleaved : countries.slice();
 
   // Process all countries in parallel with a dynamic concurrency limit
   const hostname = new URL(url).hostname.toLowerCase();
-  let currentConcurrency: number = PROXY_CONFIG.MAX_CONCURRENT_COUNTRY_CHECKS as number;
+  let currentConcurrency: number =
+    PROXY_CONFIG.MAX_CONCURRENT_COUNTRY_CHECKS as number;
   // Reduce pressure for highly rate-limited targets like Google
   if (hostname === 'google.com' || hostname === 'www.google.com') {
     currentConcurrency = Math.min(currentConcurrency, 5);
@@ -71,7 +79,7 @@ export async function checkWebsiteFromCountries(
   let rateLimitedObserved = false;
 
   // Process countries in batches to control concurrency (dynamic)
-  for (let i = 0; i < orderedCountries.length;) {
+  for (let i = 0; i < orderedCountries.length; ) {
     const batch = orderedCountries.slice(i, i + currentConcurrency);
     info(
       `Processing batch ${Math.floor(i / currentConcurrency) + 1}: ${batch.join(', ')}`,
@@ -82,7 +90,13 @@ export async function checkWebsiteFromCountries(
       try {
         // Race the real check against a fast-fail timeout per country to cap tail latency
         const result = await Promise.race([
-          checkWebsiteFromCountryInternal(url, country, timeout, options),
+          checkWebsiteFromCountryInternal(
+            url,
+            country,
+            timeout,
+            options,
+            preloadedAll
+          ),
           new Promise<CheckResult>(resolve =>
             setTimeout(
               () =>
@@ -115,18 +129,23 @@ export async function checkWebsiteFromCountries(
         results.push(result.value);
         try {
           onResult?.(result.value);
-        } catch { }
+        } catch {}
       } else {
         debug(`Batch promise rejected: ${result.reason}`, 'website-check');
       }
     }
 
     // Adjust concurrency if we see signs of rate limiting
-    const saw429 = results.slice(-batch.length).some(r => (r.error || '').includes('429'));
+    const saw429 = results
+      .slice(-batch.length)
+      .some(r => (r.error || '').includes('429'));
     if (saw429 && !rateLimitedObserved) {
       rateLimitedObserved = true;
       currentConcurrency = Math.max(3, Math.floor(currentConcurrency / 2));
-      info(`Rate limiting observed. Reducing concurrency to ${currentConcurrency}`, 'website-check');
+      info(
+        `Rate limiting observed. Reducing concurrency to ${currentConcurrency}`,
+        'website-check'
+      );
     }
 
     // Reduce or remove inter-batch delay to accelerate checks
@@ -147,7 +166,8 @@ export async function checkWebsiteFromCountryInternal(
   url: string,
   country: string,
   timeout: number,
-  options: CheckOptions = {}
+  options: CheckOptions = {},
+  preloadedAll?: import('@/types/types').PaidProxy[]
 ): Promise<CheckResult> {
   const startTime = Date.now();
 
@@ -157,7 +177,11 @@ export async function checkWebsiteFromCountryInternal(
     // In quick mode, attempt a hedge with up to two proxies in parallel; otherwise pick one
     const hedgeProxies: string[] = [];
     if (options.useHead) {
-      const proxies = await getWorkingProxiesForCountry(country, 2);
+      const proxies = await getWorkingProxiesForCountry(
+        country,
+        2,
+        preloadedAll
+      );
       for (const p of proxies) {
         hedgeProxies.push(
           JSON.stringify({
@@ -170,7 +194,7 @@ export async function checkWebsiteFromCountryInternal(
       }
     }
     if (hedgeProxies.length === 0) {
-      const single = await getWorkingProxyForCountry(country);
+      const single = await getWorkingProxyForCountry(country, preloadedAll);
       if (!single) {
         debug(`No working proxy found for ${country}`, 'website-check');
         return createErrorResponse(
@@ -252,9 +276,6 @@ export async function checkWebsiteFromCountryInternal(
       const maxRedirects = options.maxRedirects ?? (options.useHead ? 0 : 5);
 
       let response: any;
-      let protocolUsed: 'https' | 'http' = 'https';
-      let retryAfterMs: number | undefined;
-      let timings: { start: number; dns?: number; tcp?: number; tls?: number; ttfb?: number } = { start: Date.now() };
       try {
         debug(`Trying HTTPS ${method} to ${url}`, 'website-check');
         response = await axios.request({
@@ -281,7 +302,10 @@ export async function checkWebsiteFromCountryInternal(
           (httpsError as Error).message
         );
         // Dynamic fallback: for typical HEAD-block patterns (405/403 or method not allowed), retry with GET
-        const isHeadNotAllowed = errMessage.includes('405') || errMessage.includes('method') || errMessage.includes('not allowed');
+        const isHeadNotAllowed =
+          errMessage.includes('405') ||
+          errMessage.includes('method') ||
+          errMessage.includes('not allowed');
         if (options.useHead && isHeadNotAllowed) {
           debug(`HEAD blocked for ${url}. Retrying with GET.`, 'website-check');
           response = await axios.request({
@@ -312,7 +336,6 @@ export async function checkWebsiteFromCountryInternal(
             transitional: { clarifyTimeoutError: true },
           } as any);
           logRequestAttempt(url, 'HTTP', 'success');
-          protocolUsed = 'http';
         }
       }
 
@@ -323,7 +346,6 @@ export async function checkWebsiteFromCountryInternal(
         const retryMs = retryAfterHeader
           ? Math.min(parseInt(retryAfterHeader) * 1000, 2000)
           : 1000 + Math.floor(Math.random() * 500);
-        retryAfterMs = retryMs;
         await new Promise(resolve => setTimeout(resolve, retryMs));
         try {
           response = await axios.request({
@@ -411,5 +433,3 @@ export async function checkWebsiteFromCountryInternal(
     return createErrorResponse(country, errorMessage, responseTime);
   }
 }
-
-// extended enrichment helpers removed

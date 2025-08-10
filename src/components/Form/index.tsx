@@ -34,7 +34,7 @@ const Form = () => {
           <TextInput
             size='lg'
             radius='md'
-            type="url"
+            type='url'
             w={{ base: '100%', sm: '70%' }}
             placeholder='Enter your website URL with https://'
             classNames={{ section: classes.section, input: classes.input }}

@@ -38,7 +38,7 @@ export async function getCheckResults(params: {
     try {
       const body = await res.json();
       message = body?.message || body?.error || message;
-    } catch { }
+    } catch {}
     throw new Error(message);
   }
 

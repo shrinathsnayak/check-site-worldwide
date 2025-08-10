@@ -4,13 +4,9 @@ import { PROXY_CONFIG } from '@/constants/constants';
 import { PaidProxy } from '@/types/types';
 import { ALL_COUNTRIES } from '@/utils/countries';
 import { fetchWebshareProxies } from './webshare-api';
-import {
-  logProxyStatus,
-} from '@/utils/utils';
+import { logProxyStatus } from '@/utils/utils';
 import { info, debug } from '@/utils/logger';
-import {
-  getWorkingProxiesForCountriesFromRedis,
-} from '@/cache/proxy-redis';
+import { getWorkingProxiesForCountriesFromRedis } from '@/cache/proxy-redis';
 
 // Helper function to validate proxy authentication
 function hasValidAuthentication(proxy: PaidProxy): boolean {
@@ -26,20 +22,20 @@ function hasValidAuthentication(proxy: PaidProxy): boolean {
 export async function seedWorkingProxiesForCountries(
   countries: string[],
   maxPerCountry: number = PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY
-): Promise<void> {
+): Promise<PaidProxy[]> {
+  let existing: PaidProxy[] = [];
   try {
-    const normalized = (countries.length > 0
-      ? countries
-      : ALL_COUNTRIES.map(c => c.code)
+    const normalized = (
+      countries.length > 0 ? countries : ALL_COUNTRIES.map(c => c.code)
     ).map(c => c.toUpperCase());
 
-    // Determine which countries are missing in Redis
-    const existing = await getWorkingProxiesForCountriesFromRedis(normalized);
+    // Determine which countries are missing in Redis (single read)
+    existing = await getWorkingProxiesForCountriesFromRedis(normalized);
     const have = new Set(existing.map(p => (p.country || '').toUpperCase()));
     const missing = normalized.filter(c => !have.has(c));
 
     if (missing.length === 0) {
-      return;
+      return existing;
     }
 
     info(
@@ -67,26 +63,30 @@ export async function seedWorkingProxiesForCountries(
 
       if (list.length === 0) continue;
 
-      info(`Seed: testing ${list.length} proxies for ${country}`, 'paid-proxy-services');
+      info(
+        `Seed: testing ${list.length} proxies for ${country}`,
+        'paid-proxy-services'
+      );
 
       // Queue-based validation: quickly enqueue slow tests and continue with others
       const pendingQueue: PaidProxy[] = [];
       const quickTimeout = PROXY_CONFIG.SOFT_TEST_TIMEOUT || 4000;
 
-      const results: Array<{ proxy: PaidProxy; ok: boolean }> = await Promise.all(
-        list.map(async proxy => {
-          // First, attempt a quick validation; if it times out, move to queue
-          const quickPass = await Promise.race([
-            testPaidProxy(proxy, quickTimeout),
-            new Promise<boolean>(resolve =>
-              setTimeout(() => resolve(false), quickTimeout + 50)
-            ),
-          ]);
-          if (quickPass) return { proxy, ok: true } as const;
-          pendingQueue.push(proxy);
-          return { proxy, ok: false } as const;
-        })
-      );
+      const results: Array<{ proxy: PaidProxy; ok: boolean }> =
+        await Promise.all(
+          list.map(async proxy => {
+            // First, attempt a quick validation; if it times out, move to queue
+            const quickPass = await Promise.race([
+              testPaidProxy(proxy, quickTimeout),
+              new Promise<boolean>(resolve =>
+                setTimeout(() => resolve(false), quickTimeout + 50)
+              ),
+            ]);
+            if (quickPass) return { proxy, ok: true } as const;
+            pendingQueue.push(proxy);
+            return { proxy, ok: false } as const;
+          })
+        );
 
       // Process queued (slow) proxies with increased timeout, stop early when target reached
       const targetCount = Math.min(maxPerCountry, list.length);
@@ -121,11 +121,13 @@ export async function seedWorkingProxiesForCountries(
     // Write once to Redis (single command)
     const { setAllWorkingProxies } = await import('@/cache/proxy-redis');
     await setAllWorkingProxies(allUpdated);
+    return allUpdated;
   } catch (err) {
     debug(
       `Seed error: ${err instanceof Error ? err.message : 'Unknown error'}`,
       'paid-proxy-services'
     );
+    return existing;
   }
 }
 
@@ -302,19 +304,31 @@ export async function testPaidProxy(
 // Function to get working proxies for a specific country (paid proxies only)
 export async function getWorkingProxiesForCountry(
   country: string,
-  maxProxies: number = PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY
+  maxProxies: number = PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY,
+  preloadedAll?: PaidProxy[]
 ): Promise<PaidProxy[]> {
-  // Check Redis first for tested working proxies (single read for all, filter by country)
-  const cachedWorkingProxies = (await getWorkingProxiesForCountriesFromRedis([
-    country,
-  ])).filter(p => (p.country || '').toUpperCase() === country.toUpperCase());
+  // If we have a preloaded list, use it directly without any Redis reads
+  if (preloadedAll && preloadedAll.length > 0) {
+    const filtered = preloadedAll.filter(
+      p => (p.country || '').toUpperCase() === country.toUpperCase()
+    );
+    if (filtered.length > 0) {
+      logProxyStatus(country, filtered.length);
+      return filtered.slice(0, maxProxies);
+    }
+    return [];
+  }
+
+  // Fallback: single read for all, then filter by country
+  const cachedWorkingProxies = (
+    await getWorkingProxiesForCountriesFromRedis([country])
+  ).filter(p => (p.country || '').toUpperCase() === country.toUpperCase());
   if (cachedWorkingProxies && cachedWorkingProxies.length > 0) {
     logProxyStatus(country, cachedWorkingProxies.length);
     return cachedWorkingProxies.slice(0, maxProxies);
   }
 
-  // If cache miss, do not trigger a per-country Webshare fetch here to avoid N calls.
-  // Expect caller to run seedWorkingProxiesForCountries beforehand.
+  // If cache miss, expect caller to seed beforehand
   return [];
 }
 
@@ -340,13 +354,15 @@ export async function getAllProxiesForCountry(
 
 // Function to get a working proxy for a specific country (paid proxies only)
 export async function getWorkingProxyForCountry(
-  country: string
+  country: string,
+  preloadedAll?: PaidProxy[]
 ): Promise<string | null> {
   try {
     // Get working proxies (already tested and cached)
     const workingProxies = await getWorkingProxiesForCountry(
       country,
-      PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY
+      PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY,
+      preloadedAll
     );
 
     if (workingProxies.length === 0) {
