@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { proxyCache, websiteCheckCache } from '@/cache/cache';
+import {
+  deleteAllWorkingProxiesFromRedis,
+  getWorkingProxyStats,
+} from '@/cache/proxy-redis';
 import { info } from '@/utils/logger';
 
 export async function POST(request: NextRequest) {
@@ -41,9 +45,12 @@ export async function POST(request: NextRequest) {
 
     info('🗑️ Clearing all caches...', 'cache-clear');
 
-    // Clear both proxy cache and website check cache
+    // Clear in-memory caches
     proxyCache.clear();
     websiteCheckCache.clear();
+
+    // Clear Redis working proxies (single key)
+    const deleted = await deleteAllWorkingProxiesFromRedis();
 
     info('✅ All caches cleared successfully', 'cache-clear');
 
@@ -52,7 +59,8 @@ export async function POST(request: NextRequest) {
       message: 'All caches cleared successfully',
       data: {
         cleared: true,
-        cachesCleared: ['proxy', 'website-check'],
+        cachesCleared: ['proxy', 'website-check', 'redis:working-proxies'],
+        redisDeleted: deleted,
         timestamp: new Date().toISOString(),
       },
     });
@@ -78,6 +86,7 @@ export async function GET() {
 
     const proxyStats = proxyCache.getStats();
     const websiteCheckStats = websiteCheckCache.getStats();
+    const redisStats = await getWorkingProxyStats();
 
     return NextResponse.json({
       success: true,
@@ -91,8 +100,9 @@ export async function GET() {
           size: websiteCheckStats.size,
           entries: websiteCheckStats.entries,
         },
+        redisWorkingProxies: redisStats,
         total: {
-          size: proxyStats.size + websiteCheckStats.size,
+          size: proxyStats.size + websiteCheckStats.size + redisStats.total,
           entries: [...proxyStats.entries, ...websiteCheckStats.entries],
         },
         timestamp: new Date().toISOString(),

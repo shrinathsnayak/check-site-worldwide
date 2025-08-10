@@ -3,12 +3,13 @@ import axios, { AxiosRequestConfig } from 'axios';
 import {
   getWorkingProxyForCountry,
   getWorkingProxiesForCountry,
+  seedWorkingProxiesForCountries,
 } from './proxy-services';
 import type { CheckResult } from '@/types/types';
 import { PROXY_CONFIG } from '@/constants/constants';
 import { logRequestAttempt } from '@/utils/utils';
 import { createErrorResponse, createSuccessResponse } from '@/utils/response';
-import { websiteCheckCache } from '@/cache/cache';
+// remove in-memory result cache; UI will handle response caching client-side
 import { info, debug } from '@/utils/logger';
 
 interface CheckOptions {
@@ -23,18 +24,15 @@ export async function checkWebsiteFromCountries(
   timeout: number,
   options: CheckOptions = {}
 ): Promise<CheckResult[]> {
-  // Check cache first
-  const cacheKey = `${url}:${countries.sort().join(',')}`;
-  const cachedResults = websiteCheckCache.get(cacheKey);
-  if (cachedResults) {
-    info(`📦 Using cached website check results for ${url}`, 'website-check');
-    return cachedResults;
-  }
+  // No server-side result cache; UI may cache responses client-side
 
   info(
     `Starting parallel checks for ${countries.length} countries: ${countries.join(', ')}`,
     'website-check'
   );
+
+  // Ensure working proxies are seeded with a single upstream API call
+  await seedWorkingProxiesForCountries(countries);
 
   // Process all countries in parallel with a dynamic concurrency limit
   const hostname = new URL(url).hostname.toLowerCase();
@@ -101,9 +99,6 @@ export async function checkWebsiteFromCountries(
     `Completed parallel checks for ${countries.length} countries`,
     'website-check'
   );
-
-  // Cache the results
-  websiteCheckCache.set(cacheKey, results);
 
   return results;
 }

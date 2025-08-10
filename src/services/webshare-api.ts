@@ -3,7 +3,7 @@ import { PAID_PROXY_CONFIG } from '@/constants/constants';
 import type { PaidProxy, WebshareApiResponse } from '@/types/types';
 import { getCountryByCode } from '@/utils/countries';
 import { logProxyProcessing } from '@/utils/utils';
-import { proxyCache } from '@/cache/cache';
+// no longer use in-memory cache for proxies; Redis used in proxy-services
 import { info, error, debug } from '@/utils/logger';
 import { isValidProxy } from '@/validation/validation';
 
@@ -11,11 +11,7 @@ import { isValidProxy } from '@/validation/validation';
 export async function fetchWebshareProxies(
   countries: string[] = []
 ): Promise<PaidProxy[]> {
-  // Check cache first
-  const cachedData = proxyCache.get(countries);
-  if (cachedData) {
-    return cachedData;
-  }
+  // Skip in-memory cache; upstream caching handled at working-proxy granularity in Redis
 
   try {
     info('🔍 Fetching proxy list from Webshare API...', 'webshare-api');
@@ -153,19 +149,7 @@ export async function fetchWebshareProxies(
 
     logProxyProcessing(countries, allProxies.length, 'Generated valid proxies');
 
-    // Cache the results (bulk) and also seed per-country cache entries
-    proxyCache.set(countries, allProxies);
-
-    const perCountryMap = new Map<string, PaidProxy[]>();
-    for (const p of allProxies) {
-      const list = perCountryMap.get(p.country) || [];
-      list.push(p);
-      perCountryMap.set(p.country, list);
-    }
-    for (const [country, list] of perCountryMap) {
-      // Seed per-country cache so later lookups hit cache and skip tests
-      proxyCache.set(country, list);
-    }
+    // Do not cache raw proxies; only working proxies are cached in Redis elsewhere
 
     return allProxies;
   } catch (err) {

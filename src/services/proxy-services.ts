@@ -3,14 +3,14 @@ import axios from 'axios';
 import { PROXY_CONFIG } from '@/constants/constants';
 import { PaidProxy } from '@/types/types';
 import { ALL_COUNTRIES } from '@/utils/countries';
-import { getWorkingWebshareProxies } from './webshare-api';
+import { fetchWebshareProxies } from './webshare-api';
 import {
   logProxyStatus,
-  logProxyTesting,
-  logBatchProcessing,
 } from '@/utils/utils';
 import { info, debug } from '@/utils/logger';
-import { proxyCache } from '@/cache/cache';
+import {
+  getWorkingProxiesForCountriesFromRedis,
+} from '@/cache/proxy-redis';
 
 // Helper function to validate proxy authentication
 function hasValidAuthentication(proxy: PaidProxy): boolean {
@@ -22,37 +22,84 @@ function hasValidAuthentication(proxy: PaidProxy): boolean {
   );
 }
 
-export async function getPaidProxies(
-  countries: string[] = []
-): Promise<PaidProxy[]> {
+// Fetch proxies once for multiple countries and seed Redis with working ones
+export async function seedWorkingProxiesForCountries(
+  countries: string[],
+  maxPerCountry: number = PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY
+): Promise<void> {
   try {
+    const normalized = (countries.length > 0
+      ? countries
+      : ALL_COUNTRIES.map(c => c.code)
+    ).map(c => c.toUpperCase());
+
+    // Determine which countries are missing in Redis
+    const existing = await getWorkingProxiesForCountriesFromRedis(normalized);
+    const have = new Set(existing.map(p => (p.country || '').toUpperCase()));
+    const missing = normalized.filter(c => !have.has(c));
+
+    if (missing.length === 0) {
+      return;
+    }
+
     info(
-      `Fetching Webshare proxies for countries: ${countries.join(', ')}`,
+      `Seed: fetching proxies for ${missing.length} countries (one API call w/ filter)`,
       'paid-proxy-services'
     );
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      PROXY_CONFIG.MAX_PROXY_SEARCH_TIME
-    );
+    // Single Webshare API pull for all missing countries
+    const rawProxies = await fetchWebshareProxies(missing);
 
-    // Use the Webshare API to get real proxy hostnames
-    const targetCountries =
-      countries.length > 0 ? countries : ALL_COUNTRIES.map(c => c.code);
-    const proxies = await getWorkingWebshareProxies(targetCountries);
+    // Group by country and test a limited number per country
+    const byCountry = new Map<string, PaidProxy[]>();
+    for (const p of rawProxies) {
+      const c = (p.country || '').toUpperCase();
+      const arr = byCountry.get(c) || [];
+      arr.push(p);
+      byCountry.set(c, arr);
+    }
 
-    clearTimeout(timeoutId);
-    info(`Generated ${proxies.length} Webshare proxies`, 'paid-proxy-services');
+    const allUpdated: PaidProxy[] = existing.slice();
+    for (const country of missing) {
+      const list = (byCountry.get(country) || [])
+        .sort((a, b) => b.uptime - a.uptime)
+        .slice(0, Math.min(maxPerCountry, 3));
 
-    return proxies;
+      if (list.length === 0) continue;
+
+      info(`Seed: testing ${list.length} proxies for ${country}`, 'paid-proxy-services');
+
+      const results = await Promise.all(
+        list.map(proxy =>
+          testPaidProxy(proxy, PROXY_CONFIG.FAST_FAIL_TIMEOUT).then(ok => ({
+            proxy,
+            ok,
+          }))
+        )
+      );
+
+      const working = results.filter(r => r.ok).map(r => r.proxy);
+      if (working.length > 0) {
+        const updated = working.map(p => ({
+          ...p,
+          lastChecked: new Date().toISOString(),
+        }));
+        // Replace country slice inside accumulated list
+        const filtered = allUpdated.filter(
+          p => (p.country || '').toUpperCase() !== country.toUpperCase()
+        );
+        allUpdated.splice(0, allUpdated.length, ...filtered, ...updated);
+      }
+    }
+
+    // Write once to Redis (single command)
+    const { setAllWorkingProxies } = await import('@/cache/proxy-redis');
+    await setAllWorkingProxies(allUpdated);
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
     debug(
-      `Failed to fetch Webshare proxies: ${errorMessage}`,
+      `Seed error: ${err instanceof Error ? err.message : 'Unknown error'}`,
       'paid-proxy-services'
     );
-    return [];
   }
 }
 
@@ -231,159 +278,38 @@ export async function getWorkingProxiesForCountry(
   country: string,
   maxProxies: number = PROXY_CONFIG.MAX_PROXIES_PER_COUNTRY
 ): Promise<PaidProxy[]> {
-  // Check cache first for tested working proxies
-  const cacheKey = country;
-  const cachedWorkingProxies = proxyCache.get(cacheKey);
+  // Check Redis first for tested working proxies (single read for all, filter by country)
+  const cachedWorkingProxies = (await getWorkingProxiesForCountriesFromRedis([
+    country,
+  ])).filter(p => (p.country || '').toUpperCase() === country.toUpperCase());
   if (cachedWorkingProxies && cachedWorkingProxies.length > 0) {
     logProxyStatus(country, cachedWorkingProxies.length);
     return cachedWorkingProxies.slice(0, maxProxies);
   }
 
-  // Get paid proxies for this country from API
-  const paidProxies = await getPaidProxies([country]);
-
-  logProxyStatus(country, paidProxies.length);
-
-  // Filter and sort by uptime/reliability
-  const countryProxies = paidProxies
-    .filter(proxy => proxy.country === country)
-    .sort((a, b) => b.uptime - a.uptime)
-    .slice(0, Math.min(maxProxies, 3));
-
-  if (countryProxies.length === 0) {
-    return [];
-  }
-
-  info(
-    `Testing ${countryProxies.length} paid proxies for ${country}:`,
-    'paid-proxy-services'
-  );
-  countryProxies.forEach((proxy, index) => {
-    info(
-      `  ${index + 1}. ${proxy.host}:${proxy.port} (uptime: ${proxy.uptime}%)`,
-      'paid-proxy-services'
-    );
-  });
-
-  // Test proxies in parallel batches for better performance
-  const concurrencyLimit = PROXY_CONFIG.MAX_CONCURRENT_PROXY_TESTS;
-  const workingProxies: PaidProxy[] = [];
-
-  for (let i = 0; i < countryProxies.length; i += concurrencyLimit) {
-    const batch = countryProxies.slice(i, i + concurrencyLimit);
-    const batchIndex = Math.floor(i / concurrencyLimit) + 1;
-    const totalBatches = Math.ceil(countryProxies.length / concurrencyLimit);
-    logBatchProcessing(batchIndex, totalBatches, batch);
-
-    const testPromises = batch.map(async (proxy, batchIndex) => {
-      const globalIndex = i + batchIndex + 1;
-
-      // Skip proxies without authentication
-      if (!hasValidAuthentication(proxy)) {
-        debug(
-          `⚠️ Skipping proxy ${proxy.host}:${proxy.port} - missing authentication`,
-          'paid-proxy-services'
-        );
-        logProxyTesting(proxy, globalIndex, countryProxies.length, 'failed');
-        return { proxy, isWorking: false };
-      }
-
-      logProxyTesting(proxy, globalIndex, countryProxies.length, 'testing');
-      const isWorking = await testPaidProxy(
-        proxy,
-        PROXY_CONFIG.FAST_FAIL_TIMEOUT
-      );
-      logProxyTesting(
-        proxy,
-        globalIndex,
-        countryProxies.length,
-        isWorking ? 'working' : 'failed'
-      );
-      return { proxy, isWorking };
-    });
-
-    const results = await Promise.allSettled(testPromises);
-
-    // Process batch results
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value.isWorking) {
-        workingProxies.push(result.value.proxy);
-        // Stop testing if we found enough working proxies
-        if (workingProxies.length >= maxProxies) {
-          break;
-        }
-      }
-    }
-
-    // Stop if we found enough working proxies
-    if (workingProxies.length >= maxProxies) {
-      break;
-    }
-  }
-
-  // Cache the working proxies (not the raw API results)
-  if (workingProxies.length > 0) {
-    // Validate that all working proxies have proper authentication and were successfully tested
-    const validWorkingProxies = workingProxies.filter(proxy => {
-      const hasAuth = hasValidAuthentication(proxy);
-
-      if (!hasAuth) {
-        debug(
-          `⚠️ Skipping proxy ${proxy.host}:${proxy.port} - missing authentication credentials`,
-          'paid-proxy-services'
-        );
-        return false;
-      }
-
-      // Additional validation: ensure proxy has been successfully tested
-      if (!proxy.lastChecked) {
-        debug(
-          `⚠️ Skipping proxy ${proxy.host}:${proxy.port} - not properly tested`,
-          'paid-proxy-services'
-        );
-        return false;
-      }
-
-      return true;
-    });
-
-    if (validWorkingProxies.length > 0) {
-      // Update the lastChecked timestamp for cached proxies
-      const updatedProxies = validWorkingProxies.map(proxy => ({
-        ...proxy,
-        lastChecked: new Date().toISOString(),
-      }));
-
-      proxyCache.set(cacheKey, updatedProxies);
-      info(
-        `Found ${validWorkingProxies.length} working authenticated proxies for ${country}`,
-        'paid-proxy-services'
-      );
-    } else {
-      debug(
-        `⚠️ No working authenticated proxies found for ${country}`,
-        'paid-proxy-services'
-      );
-    }
-  }
-
-  return workingProxies;
+  // If cache miss, do not trigger a per-country Webshare fetch here to avoid N calls.
+  // Expect caller to run seedWorkingProxiesForCountries beforehand.
+  return [];
 }
 
 // Function to get all available proxies for a country (paid proxies only)
 export async function getAllProxiesForCountry(
   country: string
 ): Promise<PaidProxy[]> {
-  const paidProxies = await getPaidProxies([country]);
+  const paidProxies: PaidProxy[] = await fetchWebshareProxies([country]);
 
   // Remove duplicates and sort by reliability
   const uniqueProxies = paidProxies.filter(
-    (proxy, index, self) =>
+    (proxy: PaidProxy, index: number, self: PaidProxy[]) =>
       index ===
-      self.findIndex(p => p.host === proxy.host && p.port === proxy.port)
+      self.findIndex(
+        (p: PaidProxy) => p.host === proxy.host && p.port === proxy.port
+      )
   );
 
-  return uniqueProxies.sort((a, b) => b.uptime - a.uptime);
+  return uniqueProxies.sort(
+    (a: PaidProxy, b: PaidProxy) => b.uptime - a.uptime
+  );
 }
 
 // Function to get a working proxy for a specific country (paid proxies only)
