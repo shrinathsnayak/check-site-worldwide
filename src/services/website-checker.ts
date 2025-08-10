@@ -38,8 +38,7 @@ export async function checkWebsiteFromCountries(
 
   // Process all countries in parallel with a dynamic concurrency limit
   const hostname = new URL(url).hostname.toLowerCase();
-  let concurrencyLimit: number =
-    PROXY_CONFIG.MAX_CONCURRENT_COUNTRY_CHECKS as number;
+  let concurrencyLimit: number = PROXY_CONFIG.MAX_CONCURRENT_COUNTRY_CHECKS as number;
   // Reduce pressure for highly rate-limited targets like Google
   if (hostname === 'google.com' || hostname === 'www.google.com') {
     concurrencyLimit = Math.min(concurrencyLimit, 5);
@@ -69,7 +68,7 @@ export async function checkWebsiteFromCountries(
                     Math.max(timeout, 0)
                   )
                 ),
-              Math.min(timeout, 8000)
+              Math.min(Math.max(timeout, 5000), 12000)
             )
           ),
         ]);
