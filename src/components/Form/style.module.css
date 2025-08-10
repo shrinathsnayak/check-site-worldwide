@@ -1,0 +1,9 @@
+.section {
+  width: fit-content;
+}
+
+.input {
+  @media (max-width: em(750px)) {
+    font-size: var(--mantine-font-size-md);
+  }
+}

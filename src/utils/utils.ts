@@ -1,5 +1,5 @@
 // Utility functions for logging and formatting
-import { getCountryByCode } from './countries';
+import { ALL_COUNTRIES, getCountryByCode } from './countries';
 import { info, warn, error as logError } from './logger';
 
 // Helper function to log proxy processing status
@@ -123,4 +123,75 @@ export function getCountryFlagFromISOCode(country: string): string {
     .map(char => char.charCodeAt(0) - 65 + 0x1f1e6);
 
   return String.fromCodePoint(...codePoints);
+}
+
+export const getCountryAndContinentCounts = () => {
+  const countryCount = ALL_COUNTRIES.length;
+  const uniqueContinents = new Set(
+    ALL_COUNTRIES.map(country => country.continent)
+  );
+  const continentCount = uniqueContinents.size;
+
+  return { countryCount, continentCount };
+};
+
+// Converts milliseconds to seconds with configurable precision
+export function millisecondsToSeconds(
+  milliseconds: number,
+  fractionDigits: number = 1
+): number {
+  if (!Number.isFinite(milliseconds)) return 0;
+  const seconds = milliseconds / 1000;
+  return Number(seconds.toFixed(fractionDigits));
+}
+
+// Detects common anti-bot / VPN-block pages and returns a reason string if detected
+export function isLikelyBlockedResponse(
+  _url: string,
+  body: unknown
+): string | null {
+  try {
+    let text = '';
+    if (typeof body === 'string') {
+      text = body;
+    } else if (body && typeof body === 'object') {
+      try {
+        text = JSON.stringify(body).slice(0, 4000);
+      } catch {
+        text = '';
+      }
+    }
+
+    const lower = text.toLowerCase();
+
+    // Generic anti-bot / block indicators (site-agnostic)
+    const indicators = [
+      'access denied',
+      'forbidden',
+      'blocked',
+      'not allowed',
+      'unusual traffic',
+      'request blocked',
+      'verify you are human',
+      'are you a robot',
+      'complete the security check',
+      'please enable javascript',
+      'captcha',
+      'attention required',
+      'checking your browser',
+      'temporary blocked',
+      'suspicious activity',
+      'vpn',
+      'proxy',
+      'unblocker',
+    ];
+
+    if (indicators.some(k => lower.includes(k))) {
+      return 'Content indicates access is blocked or challenged';
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }

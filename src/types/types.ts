@@ -6,6 +6,7 @@ export interface CheckResult {
   responseTime: number;
   statusCode: number;
   error?: string;
+  usedIp?: string;
   timestamp: string;
 }
 
@@ -125,4 +126,11 @@ export interface WebshareApiResponse {
   next: string | null;
   previous: string | null;
   results: WebshareProxy[];
+}
+
+// UI Types
+export interface FeatureProps {
+  icon: React.FC<{ size?: number; stroke?: number }>;
+  title: React.ReactNode;
+  description: React.ReactNode;
 }

@@ -90,7 +90,7 @@ export const PWA_CONFIG = {
 } as const;
 
 // Main metadata object
-export const metadata: Metadata = {
+export const METADATA: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
     default: `${SITE_INFO.name} - Check Website Availability from Multiple Countries`,

@@ -153,8 +153,19 @@ export async function fetchWebshareProxies(
 
     logProxyProcessing(countries, allProxies.length, 'Generated valid proxies');
 
-    // Cache the results
+    // Cache the results (bulk) and also seed per-country cache entries
     proxyCache.set(countries, allProxies);
+
+    const perCountryMap = new Map<string, PaidProxy[]>();
+    for (const p of allProxies) {
+      const list = perCountryMap.get(p.country) || [];
+      list.push(p);
+      perCountryMap.set(p.country, list);
+    }
+    for (const [country, list] of perCountryMap) {
+      // Seed per-country cache so later lookups hit cache and skip tests
+      proxyCache.set(country, list);
+    }
 
     return allProxies;
   } catch (err) {

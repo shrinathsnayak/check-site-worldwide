@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const url = searchParams.get('url');
     const countriesParam = searchParams.get('countries');
     const timeoutParam = searchParams.get('timeout');
+    const modeParam = searchParams.get('mode');
 
     // Validate required parameters
     if (!url) {
@@ -71,10 +72,15 @@ export async function GET(request: NextRequest) {
     );
 
     // Check website accessibility from all specified countries
+    const useHead = modeParam === 'quick';
     const results = await checkWebsiteFromCountries(
       url,
       targetCountries,
-      timeout
+      timeout,
+      {
+        useHead,
+        maxRedirects: useHead ? 0 : 5,
+      }
     );
 
     // Create API response using centralized function

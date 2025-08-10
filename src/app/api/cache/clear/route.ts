@@ -2,8 +2,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { proxyCache, websiteCheckCache } from '@/cache/cache';
 import { info } from '@/utils/logger';
 
-export async function POST(_request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
+    // Parse request body to get the authentication key
+    const body = await request.json().catch(() => ({}));
+    const { authKey } = body;
+
+    // Get the expected authentication key from environment variables
+    const expectedAuthKey = process.env.CACHE_CLEAR_AUTH_KEY;
+
+    // Validate authentication
+    if (!expectedAuthKey) {
+      info('❌ Cache clear authentication key not configured', 'cache-clear');
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Cache clear authentication not configured',
+          error: 'CACHE_CLEAR_AUTH_KEY environment variable not set',
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!authKey || authKey !== expectedAuthKey) {
+      info(
+        '❌ Invalid authentication key provided for cache clear',
+        'cache-clear'
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Invalid authentication key',
+          error: 'Unauthorized access to cache clear endpoint',
+        },
+        { status: 401 }
+      );
+    }
+
     info('🗑️ Clearing all caches...', 'cache-clear');
 
     // Clear both proxy cache and website check cache

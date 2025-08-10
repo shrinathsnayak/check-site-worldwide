@@ -248,7 +248,7 @@ export async function getWorkingProxiesForCountry(
   const countryProxies = paidProxies
     .filter(proxy => proxy.country === country)
     .sort((a, b) => b.uptime - a.uptime)
-    .slice(0, maxProxies);
+    .slice(0, Math.min(maxProxies, 2));
 
   if (countryProxies.length === 0) {
     return [];

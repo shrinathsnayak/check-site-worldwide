@@ -1,0 +1,6 @@
+:root {
+  overscroll-behavior: none;
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  --dashed-border: 1px dashed var(--mantine-color-dark-5);
+}

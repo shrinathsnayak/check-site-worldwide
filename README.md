@@ -264,9 +264,13 @@ curl "http://localhost:3000/api/countries"
 
 **Description:** Clear all caches (proxy cache and website check cache) to force fresh data fetching
 
+**Authentication:** Requires `authKey` in request body that matches `CACHE_CLEAR_AUTH_KEY` environment variable
+
 **Example Request:**
 ```bash
-curl -X POST "http://localhost:3000/api/cache/clear"
+curl -X POST "http://localhost:3000/api/cache/clear" \
+  -H "Content-Type: application/json" \
+  -d '{"authKey": "your_secure_cache_clear_key"}'
 ```
 
 **Example Response:**
@@ -279,6 +283,15 @@ curl -X POST "http://localhost:3000/api/cache/clear"
     "cachesCleared": ["proxy", "website-check"],
     "timestamp": "2024-01-15T10:30:00Z"
   }
+}
+```
+
+**Authentication Error Response:**
+```json
+{
+  "success": false,
+  "message": "Invalid authentication key",
+  "error": "Unauthorized access to cache clear endpoint"
 }
 ```
 
@@ -381,6 +394,7 @@ check-site-worldwide/
 | `WEBSHARE_API_KEY` | Webshare proxy API key | Yes | - |
 | `NEXT_PUBLIC_APP_URL` | Application URL | No | `http://localhost:3000` |
 | `API_ENDPOINT` | API endpoint URL | No | `http://localhost:3000/api` |
+| `CACHE_CLEAR_AUTH_KEY` | Authentication key for cache clear operations | No | - |
 
 ### Logging Configuration
 

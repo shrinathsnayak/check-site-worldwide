@@ -3,9 +3,9 @@ import { LogLevel } from '@/types/types';
 // Proxy configuration constants - PAID PROXIES ONLY
 export const PROXY_CONFIG = {
   TEST_TIMEOUT: 5000, // Increased from 3000ms to 5000ms for better reliability
-  MAX_PROXIES_PER_COUNTRY: 3, // Increased from 1 to 3 for better fallback options
+  MAX_PROXIES_PER_COUNTRY: 2, // Lower to reduce proxy-search overhead
   MAX_CONCURRENT_PROXY_TESTS: 10, // Reduced from 20 to avoid overwhelming
-  MAX_CONCURRENT_COUNTRY_CHECKS: 10, // Reduced for better stability
+  MAX_CONCURRENT_COUNTRY_CHECKS: 25, // Increase to speed up worldwide checks
   PROXY_TEST_URL: 'http://httpbin.org/ip',
   // Request headers for better compatibility
   USER_AGENT: 'Check-Site-Worldwide/1.0', // Updated for project rename
@@ -16,8 +16,8 @@ export const PROXY_CONFIG = {
   UPGRADE_INSECURE_REQUESTS: '1',
   // Proxy optimizations
   SKIP_PROXY_TEST_ON_CACHE_HIT: true, // Paid proxies are reliable
-  MAX_PROXY_SEARCH_TIME: 8000, // Increased from 5000ms to 8000ms
-  FAST_FAIL_TIMEOUT: 4000, // Increased from 3000ms to 4000ms
+  MAX_PROXY_SEARCH_TIME: 5000, // Lower search time cap
+  FAST_FAIL_TIMEOUT: 2000, // Lower fast-fail timeout for proxy tests
   // Retry configuration
   MAX_RETRIES: 2, // Add retry logic for failed proxies
   RETRY_DELAY: 1000, // 1 second delay between retries
