@@ -3,6 +3,7 @@ import PageLayout from '@/components/shared/PageLayout';
 import Header from '@/components/Hero/Header';
 import Features from '@/components/Features';
 import Form from '@/components/Form';
+import SupportedCountries from '@/components/SupportedCountries';
 
 export default function Home() {
   return (
@@ -16,6 +17,7 @@ export default function Home() {
         <Header />
         <Form />
         <Features />
+        <SupportedCountries />
       </Flex>
     </PageLayout>
   );
