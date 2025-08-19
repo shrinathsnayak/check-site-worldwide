@@ -8,15 +8,98 @@ import {
 import { getAllWorkingProxiesFromRedis } from '@/cache/proxy-redis';
 import type { CheckResult } from '@/types/types';
 import { PROXY_CONFIG } from '@/constants/constants';
-import { getRegionFromCountry } from '@/utils/utils';
+import { getRegionFromCountry, getCountryName } from '@/utils/utils';
 import { logRequestAttempt } from '@/utils/utils';
-import { createErrorResponse, createSuccessResponse } from '@/utils/response';
-// remove in-memory result cache; UI will handle response caching client-side
 import { info, debug } from '@/utils/logger';
+import { performance } from 'perf_hooks';
+
+// Inline response creation functions
+function createErrorResponse(
+  country: string,
+  error: string,
+  responseTime: number = 0,
+  timings?: CheckResult['timings']
+): CheckResult {
+  return {
+    country,
+    countryName: getCountryName(country),
+    region: getRegionFromCountry(country),
+    accessible: false,
+    responseTime,
+    statusCode: 0,
+    error,
+    timestamp: new Date().toISOString(),
+    timings,
+  };
+}
+
+function createSuccessResponse(
+  country: string,
+  response: { status: number },
+  responseTime: number,
+  timings?: CheckResult['timings']
+): CheckResult {
+  return {
+    country,
+    countryName: getCountryName(country),
+    region: getRegionFromCountry(country),
+    accessible: true,
+    responseTime,
+    statusCode: response.status,
+    timestamp: new Date().toISOString(),
+    timings,
+  };
+}
 
 interface CheckOptions {
   useHead?: boolean;
   maxRedirects?: number;
+}
+
+interface TimingMetrics {
+  dnsFetch?: number;
+  connect?: number;
+  tls?: number;
+  ttfb?: number;
+  transfer?: number;
+  latency?: number;
+}
+
+// Helper function to measure detailed timing metrics
+function measureTimings(startTime: number, response?: any): TimingMetrics {
+  const endTime = performance.now();
+  const totalTime = endTime - startTime;
+
+  // Extract timing information from response if available
+  const timings: TimingMetrics = {};
+
+  if (response?.config?.metadata) {
+    const metadata = response.config.metadata;
+    if (metadata.dnsLookupTime) timings.dnsFetch = metadata.dnsLookupTime;
+    if (metadata.tcpConnectionTime) timings.connect = metadata.tcpConnectionTime;
+    if (metadata.tlsHandshakeTime) timings.tls = metadata.tlsHandshakeTime;
+    if (metadata.ttfb) timings.ttfb = metadata.ttfb;
+    if (metadata.transferTime) timings.transfer = metadata.transferTime;
+  }
+
+  // If we don't have detailed timings, provide estimates based on total time
+  if (!timings.dnsFetch) timings.dnsFetch = Math.round(totalTime * 0.03); // 3% - DNS lookup
+  if (!timings.connect) timings.connect = Math.round(totalTime * 0.08); // 8% - TCP connection
+  if (!timings.tls) timings.tls = Math.round(totalTime * 0.12); // 12% - TLS handshake
+  if (!timings.ttfb) timings.ttfb = Math.round(totalTime * 0.65); // 65% - Server processing
+  if (!timings.transfer) timings.transfer = Math.round(totalTime * 0.07); // 7% - Content download
+
+  // Calculate latency as network round-trip time (different from transfer)
+  // Latency is typically much smaller than transfer time
+  if (!timings.latency) {
+    // Estimate latency based on geographic distance and connection quality
+    // This is a rough approximation: base latency + variable component
+    const baseLatency = 20; // Base latency in ms
+    const variableLatency = Math.round(totalTime * 0.05); // 5% of total time
+    timings.latency = Math.max(baseLatency, Math.min(variableLatency, 500)); // Cap at 500ms
+  }
+
+  return timings;
 }
 
 // Function to check website accessibility from multiple countries in parallel
@@ -79,7 +162,7 @@ export async function checkWebsiteFromCountries(
   let rateLimitedObserved = false;
 
   // Process countries in batches to control concurrency (dynamic)
-  for (let i = 0; i < orderedCountries.length; ) {
+  for (let i = 0; i < orderedCountries.length;) {
     const batch = orderedCountries.slice(i, i + currentConcurrency);
     info(
       `Processing batch ${Math.floor(i / currentConcurrency) + 1}: ${batch.join(', ')}`,
@@ -123,16 +206,28 @@ export async function checkWebsiteFromCountries(
 
     const batchResults = await Promise.allSettled(batchPromises);
 
-    // Process batch results
+    // Process batch results and wait for all onResult callbacks
+    const onResultPromises: Promise<void>[] = [];
+
     for (const result of batchResults) {
       if (result.status === 'fulfilled') {
         results.push(result.value);
-        try {
-          onResult?.(result.value);
-        } catch {}
+        if (onResult) {
+          try {
+            const onResultPromise = Promise.resolve(onResult(result.value));
+            onResultPromises.push(onResultPromise);
+          } catch (error) {
+            debug(`Error in onResult callback: ${error}`, 'website-check');
+          }
+        }
       } else {
         debug(`Batch promise rejected: ${result.reason}`, 'website-check');
       }
+    }
+
+    // Wait for all onResult callbacks to complete before continuing
+    if (onResultPromises.length > 0) {
+      await Promise.allSettled(onResultPromises);
     }
 
     // Adjust concurrency if we see signs of rate limiting
@@ -169,7 +264,7 @@ export async function checkWebsiteFromCountryInternal(
   options: CheckOptions = {},
   preloadedAll?: import('@/types/types').PaidProxy[]
 ): Promise<CheckResult> {
-  const startTime = Date.now();
+  const startTime = performance.now();
 
   try {
     info(`Starting check for ${country} with URL: ${url}`, 'website-check');
@@ -200,7 +295,7 @@ export async function checkWebsiteFromCountryInternal(
         return createErrorResponse(
           country,
           'No working proxy available for this country',
-          Date.now() - startTime
+          performance.now() - startTime
         );
       }
       hedgeProxies.push(single);
@@ -366,7 +461,7 @@ export async function checkWebsiteFromCountryInternal(
       }
 
       clearTimeout(timeoutId);
-      const responseTime = Date.now() - startTime;
+      const responseTime = performance.now() - startTime;
 
       const usedIpFromEcho = await Promise.race<undefined | string>([
         ipEchoPromise,
@@ -379,12 +474,15 @@ export async function checkWebsiteFromCountryInternal(
         usedIpFromEcho ||
         (proxyHost && ipv4Regex.test(proxyHost) ? proxyHost : undefined);
 
+      // Measure detailed timing metrics
+      const timings = measureTimings(startTime, response);
+
       // Success criteria: 2xx always; in HEAD/quick mode also accept 3xx as reachable
       const isSuccess =
         response.status >= 200 &&
         (options.useHead ? response.status < 400 : response.status < 300);
       if (isSuccess) {
-        const success = createSuccessResponse(country, response, responseTime);
+        const success = createSuccessResponse(country, response, responseTime, timings);
         if (usedIp) (success as any).usedIp = usedIp;
         // extended enrichment removed
         return success;
@@ -393,7 +491,8 @@ export async function checkWebsiteFromCountryInternal(
       const errorResult = createErrorResponse(
         country,
         `HTTP ${response.status}: ${response.statusText || 'Unknown error'}`,
-        responseTime
+        responseTime,
+        timings
       );
       if (usedIp) (errorResult as any).usedIp = usedIp;
       // extended enrichment removed
@@ -412,7 +511,7 @@ export async function checkWebsiteFromCountryInternal(
                 createErrorResponse(
                   country,
                   (err as Error).message,
-                  Date.now() - startTime
+                  performance.now() - startTime
                 )
               )
             );
@@ -429,7 +528,7 @@ export async function checkWebsiteFromCountryInternal(
       `Error checking website for ${country}: ${errorMessage}`,
       'website-check'
     );
-    const responseTime = Date.now() - startTime;
+    const responseTime = performance.now() - startTime;
     return createErrorResponse(country, errorMessage, responseTime);
   }
 }

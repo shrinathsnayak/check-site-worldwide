@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useQueryState, parseAsStringEnum } from 'nuqs';
 import {
   Container,
   Title,
@@ -8,15 +9,15 @@ import {
   Group,
   Box,
   Badge,
-  Progress,
   SimpleGrid,
   Text,
   Space,
   Loader,
-  Button,
+  SegmentedControl,
 } from '@mantine/core';
-import { IconCheck, IconX, IconClock } from '@tabler/icons-react';
+import { IconCheck, IconX, IconClock, IconGrid3x3, IconTable } from '@tabler/icons-react';
 import { useStreamingCheck } from '@/hooks/useStreamingCheck';
+import ResultsTable from './ResultsTable';
 import type { CheckResult } from '@/types/types';
 import {
   getCountryFlagFromISOCode,
@@ -103,12 +104,36 @@ function CountryCard({
       </Group>
       <Space h={6} />
       {status === 'completed' && result?.accessible ? (
-        <Group gap="md">
-          <Text size="sm">
-            Time: {millisecondsToSeconds(result.responseTime)}s
-          </Text>
-          <Text size="sm">IP: {result.usedIp}</Text>
-        </Group>
+        <>
+          <Group gap="md" mb="xs">
+            <Text size="sm">
+              Total: {millisecondsToSeconds(result.responseTime)}s
+            </Text>
+            <Text size="sm">IP: {result.usedIp}</Text>
+          </Group>
+          {result.timings && (
+            <Group gap="xs" wrap="wrap">
+              <Text size="xs" c="dimmed">
+                DNS: {result.timings.dnsFetch}ms
+              </Text>
+              <Text size="xs" c="dimmed">
+                Connect: {result.timings.connect}ms
+              </Text>
+              <Text size="xs" c="dimmed">
+                TLS: {result.timings.tls}ms
+              </Text>
+              <Text size="xs" c="dimmed">
+                TTFB: {result.timings.ttfb}ms
+              </Text>
+              <Text size="xs" c="dimmed">
+                Transfer: {result.timings.transfer}ms
+              </Text>
+              <Text size="xs" c="dimmed">
+                Latency: {result.timings.latency}ms
+              </Text>
+            </Group>
+          )}
+        </>
       ) : status === 'completed' && result ? (
         <Text size="sm">{result.error ?? 'Unknown error'}</Text>
       ) : status === 'loading' ? (
@@ -170,14 +195,18 @@ function ResultsGrid({
 }
 
 export default function StreamingResults({ url, countries }: StreamingResultsProps) {
+  // Use nuqs for URL parameter management
+  const [viewMode, setViewMode] = useQueryState(
+    'view',
+    parseAsStringEnum(['grid', 'table']).withDefault('grid')
+  );
+
   const {
     isStreaming,
     totalCountries,
-    completedCountries,
     countries: countryStates,
     error,
     startStreaming,
-    progress,
   } = useStreamingCheck();
 
   useEffect(() => {
@@ -193,7 +222,7 @@ export default function StreamingResults({ url, countries }: StreamingResultsPro
   ).length;
 
   const errorCount = countryStates.filter(
-    c => c.status === 'completed' && !c.result?.accessible
+    c => c.status === 'completed' && c.result && !c.result.accessible
   ).length;
 
   const avgResponseTime = countryStates
@@ -218,21 +247,16 @@ export default function StreamingResults({ url, countries }: StreamingResultsPro
               border: '1px dashed var(--mantine-color-dark-5) !important',
             }}
           >
-            <Title order={4} mb="md">
-              {url}
-            </Title>
-
-            {isStreaming && (
-              <Box mb="md">
-                <Group justify="space-between" mb="xs">
-                  <Text size="sm">
-                    Progress: {completedCountries} / {totalCountries} countries
-                  </Text>
-                  <Text size="sm">{Math.round(progress * 100)}%</Text>
-                </Group>
-                <Progress value={progress * 100} animated />
-              </Box>
-            )}
+            <Group justify="space-between" align="center" mb="md">
+              <Title order={4}>
+                {url}
+              </Title>
+              {isStreaming ? (
+                <Loader size="sm" color="red" />
+              ) : (
+                <IconCheck size={24} color="var(--mantine-color-green-6)" />
+              )}
+            </Group>
 
             <Group gap="sm">
               <Badge color="green" variant="light">
@@ -263,7 +287,47 @@ export default function StreamingResults({ url, countries }: StreamingResultsPro
             }}
           >
             {countryStates.length > 0 ? (
-              <ResultsGrid countries={countryStates} />
+              <>
+                <Group justify="space-between" mb="md">
+                  <Text size="lg" fw={600}>
+                    Results
+                  </Text>
+                  <div>
+                    <SegmentedControl
+                      size='md'
+                      color="red"
+                      value={viewMode}
+                      onChange={(value) => setViewMode(value as 'grid' | 'table')}
+                      data={[
+                        {
+                          label: (
+                            <Group gap={6} wrap="nowrap">
+                              <IconGrid3x3 size={14} />
+                              <Text size="sm">Grid</Text>
+                            </Group>
+                          ),
+                          value: 'grid',
+                        },
+                        {
+                          label: (
+                            <Group gap={6} wrap="nowrap">
+                              <IconTable size={14} />
+                              <Text size="sm">Table</Text>
+                            </Group>
+                          ),
+                          value: 'table',
+                        },
+                      ]}
+                    />
+                  </div>
+                </Group>
+
+                {viewMode === 'grid' ? (
+                  <ResultsGrid countries={countryStates} />
+                ) : (
+                  <ResultsTable countries={countryStates} />
+                )}
+              </>
             ) : (
               <Group justify="center" p="xl">
                 <Loader size="lg" />

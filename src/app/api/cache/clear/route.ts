@@ -4,6 +4,10 @@ import {
   deleteAllWorkingProxiesFromRedis,
   getWorkingProxyStats,
 } from '@/cache/proxy-redis';
+import {
+  clearAllCachedResults,
+  getCacheStats,
+} from '@/cache/results-redis';
 import { info } from '@/utils/logger';
 
 export async function POST(request: NextRequest) {
@@ -49,8 +53,9 @@ export async function POST(request: NextRequest) {
     proxyCache.clear();
     websiteCheckCache.clear();
 
-    // Clear Redis working proxies (single key)
-    const deleted = await deleteAllWorkingProxiesFromRedis();
+    // Clear Redis caches
+    const deletedProxies = await deleteAllWorkingProxiesFromRedis();
+    const deletedResults = await clearAllCachedResults();
 
     info('✅ All caches cleared successfully', 'cache-clear');
 
@@ -59,8 +64,11 @@ export async function POST(request: NextRequest) {
       message: 'All caches cleared successfully',
       data: {
         cleared: true,
-        cachesCleared: ['proxy', 'website-check', 'redis:working-proxies'],
-        redisDeleted: deleted,
+        cachesCleared: ['proxy', 'website-check', 'redis:working-proxies', 'redis:results'],
+        redisDeleted: {
+          proxies: deletedProxies,
+          results: deletedResults,
+        },
         timestamp: new Date().toISOString(),
       },
     });
@@ -86,7 +94,8 @@ export async function GET() {
 
     const proxyStats = proxyCache.getStats();
     const websiteCheckStats = websiteCheckCache.getStats();
-    const redisStats = await getWorkingProxyStats();
+    const redisProxyStats = await getWorkingProxyStats();
+    const redisResultsStats = await getCacheStats();
 
     return NextResponse.json({
       success: true,
@@ -100,10 +109,11 @@ export async function GET() {
           size: websiteCheckStats.size,
           entries: websiteCheckStats.entries,
         },
-        redisWorkingProxies: redisStats,
+        redisWorkingProxies: redisProxyStats,
+        redisResults: redisResultsStats,
         total: {
-          size: proxyStats.size + websiteCheckStats.size + redisStats.total,
-          entries: [...proxyStats.entries, ...websiteCheckStats.entries],
+          size: proxyStats.size + websiteCheckStats.size + redisProxyStats.total + redisResultsStats.totalEntries,
+          entries: [...proxyStats.entries, ...websiteCheckStats.entries, ...redisResultsStats.keys],
         },
         timestamp: new Date().toISOString(),
       },

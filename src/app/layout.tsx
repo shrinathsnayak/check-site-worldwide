@@ -3,6 +3,7 @@ import '@/styles/global.css';
 
 import type { Metadata } from 'next';
 import { ColorSchemeScript } from '@mantine/core';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { Providers } from '../components/providers';
 import { METADATA } from '@/constants/metadata';
 import Metrics from '@/observability';
@@ -28,7 +29,9 @@ export default function RootLayout({
         <Metrics />
       </head>
       <body suppressHydrationWarning={true} className='root'>
-        <Providers>{children}</Providers>
+        <NuqsAdapter>
+          <Providers>{children}</Providers>
+        </NuqsAdapter>
         <script
           data-name='BMC-Widget'
           data-cfasync='false'

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { StreamingState, StreamingEvent, CheckResult } from '@/types/types';
 import { ALL_COUNTRIES } from '@/utils/countries';
-import { streamingCache } from '@/cache/streaming-cache';
 
 export function useStreamingCheck() {
   const [state, setState] = useState<StreamingState>({
@@ -20,39 +19,15 @@ export function useStreamingCheck() {
 
   const startStreaming = useCallback(
     (url: string, countries?: string[]) => {
-      // Check for cached results first
-      const cachedResults = streamingCache.get(url, countries);
-
-      // Reset state with cached results if available
+      // Reset state - server will handle caching
       setState({
         isStreaming: true,
         totalCountries: 0,
-        completedCountries: cachedResults?.length || 0,
-        results: cachedResults || [],
+        completedCountries: 0,
+        results: [],
         error: null,
         countries: [],
       });
-
-      // If we have complete cached results, don't start streaming
-      const expectedCountries = countries?.length || ALL_COUNTRIES.length;
-      if (cachedResults && cachedResults.length >= expectedCountries) {
-        setState(prev => ({
-          ...prev,
-          isStreaming: false,
-          totalCountries: expectedCountries,
-          countries: cachedResults.map(result => {
-            const country = ALL_COUNTRIES.find(c => c.code === result.country);
-            return {
-              code: result.country,
-              name: country?.name || result.country,
-              region: country?.region || 'Unknown',
-              status: result.accessible ? 'completed' : 'error',
-              result,
-            };
-          }),
-        }));
-        return;
-      }
 
       // Close existing connection
       if (eventSourceRef.current) {
@@ -70,7 +45,6 @@ export function useStreamingCheck() {
       // Build query parameters
       const params = new URLSearchParams();
       params.set('url', url);
-      params.set('stream', 'true');
       if (countries && countries.length > 0) {
         params.set('countries', countries.join(','));
       }
@@ -84,6 +58,27 @@ export function useStreamingCheck() {
           const streamingEvent: StreamingEvent = JSON.parse(event.data);
 
           switch (streamingEvent.type) {
+            case 'cached': {
+              const cachedData = streamingEvent.data as any;
+              // Instantly show cached results - no loading state
+              setState(prev => ({
+                ...prev,
+                isStreaming: false, // No loading for cached results
+                totalCountries: cachedData.totalCountries,
+                completedCountries: cachedData.results.length,
+                results: cachedData.results,
+                countries: cachedData.countries.map((country: any) => {
+                  const result = cachedData.results.find((r: CheckResult) => r.country === country.code);
+                  return {
+                    ...country,
+                    status: 'completed' as const,
+                    result,
+                  };
+                }),
+              }));
+              break;
+            }
+
             case 'init': {
               const initData = streamingEvent.data as any;
               setState(prev => ({
@@ -100,31 +95,46 @@ export function useStreamingCheck() {
             case 'result': {
               const result = streamingEvent.data as CheckResult;
 
-              // Update cache with new result
-              streamingCache.updatePartial(url, result, countries);
+              setState(prev => {
+                const newCompletedCount = prev.completedCountries + 1;
+                console.log(`📊 Received result ${newCompletedCount}/${prev.totalCountries} for ${result.country}`);
 
-              setState(prev => ({
-                ...prev,
-                completedCountries: prev.completedCountries + 1,
-                results: [...prev.results, result],
-                countries: prev.countries.map(country =>
-                  country.code === result.country
-                    ? {
-                      ...country,
-                      status: result.accessible ? 'completed' : 'error',
-                      result,
-                    }
-                    : country
-                ),
-              }));
+                return {
+                  ...prev,
+                  completedCountries: newCompletedCount,
+                  results: [...prev.results, result],
+                  countries: prev.countries.map(country =>
+                    country.code === result.country
+                      ? {
+                        ...country,
+                        status: 'completed',
+                        result,
+                      }
+                      : country
+                  ),
+                };
+              });
               break;
             }
 
             case 'complete': {
-              setState(prev => {
-                // Cache final results
-                streamingCache.set(url, prev.results, countries);
+              const completeData = streamingEvent.data as any;
+              console.log(`✅ Stream completed: ${completeData.totalProcessed}/${completeData.totalExpected} countries processed`);
 
+              setState(prev => {
+                // Only mark as complete if we have received all expected results
+                const expectedCount = prev.totalCountries;
+                const actualCount = prev.completedCountries;
+
+                if (expectedCount > 0 && actualCount < expectedCount) {
+                  console.warn(`⚠️ Stream marked complete but missing results: ${actualCount}/${expectedCount}`);
+                  console.warn(`Missing countries:`, prev.countries.filter(c => c.status !== 'completed').map(c => c.code));
+
+                  // Don't mark as complete yet - keep streaming indicator
+                  return prev;
+                }
+
+                console.log(`✅ All ${actualCount} results received, marking as complete`);
                 return {
                   ...prev,
                   isStreaming: false,
@@ -210,21 +220,11 @@ export function useStreamingCheck() {
     return resultsByRegion;
   }, [state.results]);
 
-  const clearCache = useCallback((url: string, countries?: string[]) => {
-    streamingCache.clear(url, countries);
-  }, []);
-
-  const clearAllCache = useCallback(() => {
-    streamingCache.clearAll();
-  }, []);
-
   return {
     ...state,
     startStreaming,
     stopStreaming,
     getResultsByRegion,
-    clearCache,
-    clearAllCache,
     progress: state.totalCountries > 0 ? state.completedCountries / state.totalCountries : 0,
   };
 }

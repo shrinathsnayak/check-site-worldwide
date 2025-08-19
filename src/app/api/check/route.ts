@@ -3,9 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateUrl, validateCountries } from '@/validation/validation';
 import { createErrorResponse } from '@/validation/errors';
 import { ALL_COUNTRIES } from '@/utils/countries';
-import { createApiResponse } from '@/utils/response';
 import { info, error } from '@/utils/logger';
 import type { CheckResult } from '@/types/types';
+import {
+  getCachedResults,
+  setCachedResults,
+  updateCachedResults
+} from '@/cache/results-redis';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,8 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
     const countriesParam = searchParams.get('countries');
-    const stream = searchParams.get('stream') === 'true';
-    // timeout and mode are no longer accepted via API
+    // Always use streaming - no parameter needed
 
     // Validate required parameters
     if (!url) {
@@ -64,30 +67,12 @@ export async function GET(request: NextRequest) {
         : ALL_COUNTRIES.map(country => country.code);
 
     info(
-      `Starting website accessibility check for ${url} from ${targetCountries.length} countries (streaming: ${stream})`,
+      `Starting website accessibility check for ${url} from ${targetCountries.length} countries (streaming)`,
       'api-check'
     );
 
-    // Handle streaming vs non-streaming responses
-    if (stream) {
-      return handleStreamingRequest(url, targetCountries, timeout);
-    }
-
-    // Check website accessibility from all specified countries
-    const results = await checkWebsiteFromCountries(
-      url,
-      targetCountries,
-      timeout,
-      {
-        useHead: true,
-        maxRedirects: 0,
-      }
-    );
-
-    // Create API response using centralized function
-    const apiResponse = createApiResponse(url, results);
-
-    return NextResponse.json(apiResponse);
+    // Always use streaming
+    return handleStreamingRequest(url, targetCountries, timeout);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
     error(
@@ -114,31 +99,89 @@ async function handleStreamingRequest(
 ): Promise<Response> {
   const encoder = new TextEncoder();
 
+  const countries = targetCountries.length === ALL_COUNTRIES.length ? undefined : targetCountries;
+
   const stream = new ReadableStream({
-    start(controller) {
-      // Send initial metadata
-      const initData = {
-        type: 'init',
-        data: {
-          url,
-          totalCountries: targetCountries.length,
-          countries: targetCountries.map(code => {
-            const country = ALL_COUNTRIES.find(c => c.code === code);
-            return {
-              code,
-              name: country?.name || code,
-              region: country?.region || 'Unknown'
-            };
-          })
+    async start(controller) {
+      let isClosed = false;
+
+      const safeEnqueue = (data: string) => {
+        if (!isClosed) {
+          try {
+            controller.enqueue(encoder.encode(data));
+          } catch (err) {
+            isClosed = true;
+            console.warn('Stream controller already closed:', err);
+          }
         }
       };
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify(initData)}\n\n`));
-    },
 
-    async pull(controller) {
+      const safeClose = () => {
+        if (!isClosed) {
+          isClosed = true;
+          controller.close();
+        }
+      };
+
       try {
+        // Check Redis cache first
+        const cachedResults = await getCachedResults(url, countries);
+
+        if (cachedResults && cachedResults.length >= targetCountries.length) {
+          info(`Using cached results for streaming ${url} (${cachedResults.length} countries)`, 'api-check');
+
+          // Send cached data event - this tells client to skip loading
+          const cachedData = {
+            type: 'cached',
+            data: {
+              url,
+              totalCountries: targetCountries.length,
+              results: cachedResults,
+              countries: targetCountries.map(code => {
+                const country = ALL_COUNTRIES.find(c => c.code === code);
+                return {
+                  code,
+                  name: country?.name || code,
+                  region: country?.region || 'Unknown'
+                };
+              })
+            }
+          };
+          safeEnqueue(`data: ${JSON.stringify(cachedData)}\n\n`);
+
+          // Send completion event
+          const completeData = {
+            type: 'complete',
+            data: { timestamp: new Date().toISOString() }
+          };
+          safeEnqueue(`data: ${JSON.stringify(completeData)}\n\n`);
+          safeClose();
+          return;
+        }
+
+        // Send initial metadata for fresh check
+        const initData = {
+          type: 'init',
+          data: {
+            url,
+            totalCountries: targetCountries.length,
+            countries: targetCountries.map(code => {
+              const country = ALL_COUNTRIES.find(c => c.code === code);
+              return {
+                code,
+                name: country?.name || code,
+                region: country?.region || 'Unknown'
+              };
+            })
+          }
+        };
+        safeEnqueue(`data: ${JSON.stringify(initData)}\n\n`);
+
         // Start checking countries with streaming callback
-        await checkWebsiteFromCountries(
+        const allResults: CheckResult[] = [];
+        let completedCount = 0;
+
+        const results = await checkWebsiteFromCountries(
           url,
           targetCountries,
           timeout,
@@ -146,27 +189,45 @@ async function handleStreamingRequest(
             useHead: true,
             maxRedirects: 0,
           },
-          (result: CheckResult) => {
+          async (result: CheckResult) => {
+            if (isClosed) return; // Skip if stream is closed
+
+            // Add to results array
+            allResults.push(result);
+            completedCount++;
+
+            // Update Redis cache with partial result
+            await updateCachedResults(url, result, countries);
+
             // Stream each result as it completes
             const resultData = {
               type: 'result',
               data: result
             };
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(resultData)}\n\n`)
-            );
+            safeEnqueue(`data: ${JSON.stringify(resultData)}\n\n`);
+
+            info(`Streamed result ${completedCount}/${targetCountries.length} for ${result.country}`, 'api-check');
           }
         );
 
-        // Send completion event
+        // Ensure we have all results before completing
+        info(`All ${results.length} countries completed, finalizing stream`, 'api-check');
+
+        // Cache final complete results
+        await setCachedResults(url, results, countries);
+
+        // Send completion event only after all results are processed
         const completeData = {
           type: 'complete',
-          data: { timestamp: new Date().toISOString() }
+          data: {
+            timestamp: new Date().toISOString(),
+            totalProcessed: results.length,
+            totalExpected: targetCountries.length
+          }
         };
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(completeData)}\n\n`)
-        );
-        controller.close();
+        safeEnqueue(`data: ${JSON.stringify(completeData)}\n\n`);
+        safeClose();
+
       } catch (err) {
         const errorData = {
           type: 'error',
@@ -174,10 +235,8 @@ async function handleStreamingRequest(
             message: err instanceof Error ? err.message : 'Unknown error'
           }
         };
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`)
-        );
-        controller.close();
+        safeEnqueue(`data: ${JSON.stringify(errorData)}\n\n`);
+        safeClose();
       }
     }
   });

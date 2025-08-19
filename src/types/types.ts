@@ -8,22 +8,18 @@ export interface CheckResult {
   error?: string;
   usedIp?: string;
   timestamp: string;
+  // Additional timing metrics
+  timings?: {
+    dnsFetch?: number;    // DNS lookup time
+    connect?: number;     // TCP connection time
+    tls?: number;         // TLS handshake time
+    ttfb?: number;        // Time to First Byte
+    transfer?: number;    // Content transfer time
+    latency?: number;     // Network latency
+  };
 }
 
-export interface CheckSummary {
-  total: number;
-  accessible: number;
-  inaccessible: number;
-  successRate: number;
-  avgResponseTime: number;
-}
-
-export interface CheckResponse {
-  success: boolean;
-  url: string;
-  summary: CheckSummary;
-  resultsByRegion: Record<string, CheckResult[]>;
-}
+// CheckSummary and CheckResponse removed - no longer needed for streaming-only approach
 
 export interface CountryInfo {
   code: string;
@@ -140,8 +136,17 @@ export interface StreamingInitData {
 }
 
 export interface StreamingEvent {
-  type: 'init' | 'result' | 'complete' | 'error';
-  data: StreamingInitData | CheckResult | { timestamp: string } | { message: string };
+  type: 'init' | 'result' | 'complete' | 'error' | 'cached';
+  data: StreamingInitData | CheckResult | { timestamp: string } | { message: string } | {
+    url: string;
+    totalCountries: number;
+    results: CheckResult[];
+    countries: Array<{
+      code: string;
+      name: string;
+      region: string;
+    }>;
+  };
 }
 
 export interface StreamingState {
@@ -158,6 +163,8 @@ export interface StreamingState {
     result?: CheckResult;
   }>;
 }
+
+export type ViewMode = 'grid' | 'table';
 
 // UI Types
 export interface FeatureProps {
