@@ -27,7 +27,8 @@ const Form = () => {
 
   const handleFormSubmission = async (values: { url: string }) => {
     const urlParam = encodeURIComponent(values.url);
-    router.push(`/results?url=${urlParam}`);
+    // Always use streaming mode
+    router.push(`/results?url=${urlParam}&stream=true`);
   };
 
   return (

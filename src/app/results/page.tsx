@@ -1,8 +1,10 @@
-import { Container, Title, Alert, Group, Box, Badge } from '@mantine/core';
+import { Container, Title, Alert, Group, Box, Badge, Switch } from '@mantine/core';
 import PageLayout from '@/components/shared/PageLayout';
 import { validateUrl } from '@/validation/validation';
 import ResultsByRegion from '@/components/results/ResultsByRegion';
+import StreamingResults from '@/components/results/StreamingResults';
 import { getCheckResults } from '@/actions/actions';
+import { Suspense } from 'react';
 
 export default async function ResultsPage({
   searchParams,
@@ -11,12 +13,14 @@ export default async function ResultsPage({
     url?: string;
     countries?: string;
     mock?: string;
+    stream?: string;
   }>;
 }) {
   const sp = await searchParams;
   const urlParam = sp.url ?? '';
   const countriesParam = sp.countries ?? '';
   const mockParam = sp.mock ?? '';
+  const streamParam = sp.stream === 'true';
   // mode no longer supported
 
   if (!urlParam || !validateUrl(urlParam)) {
@@ -31,6 +35,17 @@ export default async function ResultsPage({
     );
   }
 
+  // If streaming is requested, use the streaming component
+  if (streamParam) {
+    const countriesArray = countriesParam ? countriesParam.split(',') : undefined;
+    return (
+      <PageLayout>
+        <StreamingResults url={urlParam} countries={countriesArray} />
+      </PageLayout>
+    );
+  }
+
+  // Otherwise, use the traditional non-streaming approach
   let data: import('@/types/types').CheckResponse | null = null;
   let errorMessage: string | null = null;
 

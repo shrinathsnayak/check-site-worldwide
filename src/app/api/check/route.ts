@@ -5,6 +5,7 @@ import { createErrorResponse } from '@/validation/errors';
 import { ALL_COUNTRIES } from '@/utils/countries';
 import { createApiResponse } from '@/utils/response';
 import { info, error } from '@/utils/logger';
+import type { CheckResult } from '@/types/types';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const url = searchParams.get('url');
     const countriesParam = searchParams.get('countries');
+    const stream = searchParams.get('stream') === 'true';
     // timeout and mode are no longer accepted via API
 
     // Validate required parameters
@@ -62,9 +64,14 @@ export async function GET(request: NextRequest) {
         : ALL_COUNTRIES.map(country => country.code);
 
     info(
-      `Starting website accessibility check for ${url} from ${targetCountries.length} countries`,
+      `Starting website accessibility check for ${url} from ${targetCountries.length} countries (streaming: ${stream})`,
       'api-check'
     );
+
+    // Handle streaming vs non-streaming responses
+    if (stream) {
+      return handleStreamingRequest(url, targetCountries, timeout);
+    }
 
     // Check website accessibility from all specified countries
     const results = await checkWebsiteFromCountries(
@@ -98,4 +105,91 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+async function handleStreamingRequest(
+  url: string,
+  targetCountries: string[],
+  timeout: number
+): Promise<Response> {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    start(controller) {
+      // Send initial metadata
+      const initData = {
+        type: 'init',
+        data: {
+          url,
+          totalCountries: targetCountries.length,
+          countries: targetCountries.map(code => {
+            const country = ALL_COUNTRIES.find(c => c.code === code);
+            return {
+              code,
+              name: country?.name || code,
+              region: country?.region || 'Unknown'
+            };
+          })
+        }
+      };
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(initData)}\n\n`));
+    },
+
+    async pull(controller) {
+      try {
+        // Start checking countries with streaming callback
+        await checkWebsiteFromCountries(
+          url,
+          targetCountries,
+          timeout,
+          {
+            useHead: true,
+            maxRedirects: 0,
+          },
+          (result: CheckResult) => {
+            // Stream each result as it completes
+            const resultData = {
+              type: 'result',
+              data: result
+            };
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(resultData)}\n\n`)
+            );
+          }
+        );
+
+        // Send completion event
+        const completeData = {
+          type: 'complete',
+          data: { timestamp: new Date().toISOString() }
+        };
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(completeData)}\n\n`)
+        );
+        controller.close();
+      } catch (err) {
+        const errorData = {
+          type: 'error',
+          data: {
+            message: err instanceof Error ? err.message : 'Unknown error'
+          }
+        };
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`)
+        );
+        controller.close();
+      }
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }

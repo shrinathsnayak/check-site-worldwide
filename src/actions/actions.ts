@@ -30,7 +30,8 @@ export async function getCheckResults(params: {
   // timeout and mode removed from API layer
 
   const res = await fetch(`${origin}/api/check?${qs.toString()}`.toString(), {
-    next: { revalidate: 60 * 60 },
+    next: { revalidate: 5 * 60 }, // Reduce cache time to 5 minutes for more frequent updates
+    cache: 'no-store', // Disable caching for dynamic results
   });
 
   if (!res.ok) {
@@ -38,7 +39,7 @@ export async function getCheckResults(params: {
     try {
       const body = await res.json();
       message = body?.message || body?.error || message;
-    } catch {}
+    } catch { }
     throw new Error(message);
   }
 

@@ -128,6 +128,37 @@ export interface WebshareApiResponse {
   results: WebshareProxy[];
 }
 
+// Streaming API Types
+export interface StreamingInitData {
+  url: string;
+  totalCountries: number;
+  countries: Array<{
+    code: string;
+    name: string;
+    region: string;
+  }>;
+}
+
+export interface StreamingEvent {
+  type: 'init' | 'result' | 'complete' | 'error';
+  data: StreamingInitData | CheckResult | { timestamp: string } | { message: string };
+}
+
+export interface StreamingState {
+  isStreaming: boolean;
+  totalCountries: number;
+  completedCountries: number;
+  results: CheckResult[];
+  error: string | null;
+  countries: Array<{
+    code: string;
+    name: string;
+    region: string;
+    status: 'pending' | 'loading' | 'completed' | 'error';
+    result?: CheckResult;
+  }>;
+}
+
 // UI Types
 export interface FeatureProps {
   icon: React.FC<{ size?: number; stroke?: number }>;
