@@ -8,62 +8,14 @@ import {
 import { getAllWorkingProxiesFromRedis } from '@/cache/proxy-redis';
 import type { CheckResult } from '@/types/types';
 import { PROXY_CONFIG } from '@/constants/constants';
-import { getRegionFromCountry, getCountryName } from '@/utils/utils';
-import { logRequestAttempt } from '@/utils/utils';
+import { createErrorResponse, createSuccessResponse } from '@/utils/response-utils';
+import { getRegionFromCountry, logRequestAttempt } from '@/utils/utils';
 import { info, debug } from '@/utils/logger';
 import { performance } from 'perf_hooks';
 
-// Inline response creation functions
-function createErrorResponse(
-  country: string,
-  error: string,
-  responseTime: number = 0,
-  timings?: CheckResult['timings']
-): CheckResult {
-  return {
-    country,
-    countryName: getCountryName(country),
-    region: getRegionFromCountry(country),
-    accessible: false,
-    responseTime,
-    statusCode: 0,
-    error,
-    timestamp: new Date().toISOString(),
-    timings,
-  };
-}
 
-function createSuccessResponse(
-  country: string,
-  response: { status: number },
-  responseTime: number,
-  timings?: CheckResult['timings']
-): CheckResult {
-  return {
-    country,
-    countryName: getCountryName(country),
-    region: getRegionFromCountry(country),
-    accessible: true,
-    responseTime,
-    statusCode: response.status,
-    timestamp: new Date().toISOString(),
-    timings,
-  };
-}
 
-interface CheckOptions {
-  useHead?: boolean;
-  maxRedirects?: number;
-}
-
-interface TimingMetrics {
-  dnsFetch?: number;
-  connect?: number;
-  tls?: number;
-  ttfb?: number;
-  transfer?: number;
-  latency?: number;
-}
+import type { CheckOptions, TimingMetrics } from '@/types/service-types';
 
 // Helper function to measure detailed timing metrics
 function measureTimings(startTime: number, response?: any): TimingMetrics {
@@ -76,7 +28,8 @@ function measureTimings(startTime: number, response?: any): TimingMetrics {
   if (response?.config?.metadata) {
     const metadata = response.config.metadata;
     if (metadata.dnsLookupTime) timings.dnsFetch = metadata.dnsLookupTime;
-    if (metadata.tcpConnectionTime) timings.connect = metadata.tcpConnectionTime;
+    if (metadata.tcpConnectionTime)
+      timings.connect = metadata.tcpConnectionTime;
     if (metadata.tlsHandshakeTime) timings.tls = metadata.tlsHandshakeTime;
     if (metadata.ttfb) timings.ttfb = metadata.ttfb;
     if (metadata.transferTime) timings.transfer = metadata.transferTime;
@@ -482,7 +435,12 @@ export async function checkWebsiteFromCountryInternal(
         response.status >= 200 &&
         (options.useHead ? response.status < 400 : response.status < 300);
       if (isSuccess) {
-        const success = createSuccessResponse(country, response, responseTime, timings);
+        const success = createSuccessResponse(
+          country,
+          response,
+          responseTime,
+          timings
+        );
         if (usedIp) (success as any).usedIp = usedIp;
         // extended enrichment removed
         return success;

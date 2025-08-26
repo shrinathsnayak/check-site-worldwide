@@ -10,12 +10,12 @@ export interface CheckResult {
   timestamp: string;
   // Additional timing metrics
   timings?: {
-    dnsFetch?: number;    // DNS lookup time
-    connect?: number;     // TCP connection time
-    tls?: number;         // TLS handshake time
-    ttfb?: number;        // Time to First Byte
-    transfer?: number;    // Content transfer time
-    latency?: number;     // Network latency
+    dnsFetch?: number; // DNS lookup time
+    connect?: number; // TCP connection time
+    tls?: number; // TLS handshake time
+    ttfb?: number; // Time to First Byte
+    transfer?: number; // Content transfer time
+    latency?: number; // Network latency
   };
 }
 
@@ -137,16 +137,21 @@ export interface StreamingInitData {
 
 export interface StreamingEvent {
   type: 'init' | 'result' | 'complete' | 'error' | 'cached';
-  data: StreamingInitData | CheckResult | { timestamp: string } | { message: string } | {
-    url: string;
-    totalCountries: number;
-    results: CheckResult[];
-    countries: Array<{
-      code: string;
-      name: string;
-      region: string;
-    }>;
-  };
+  data:
+    | StreamingInitData
+    | CheckResult
+    | { timestamp: string }
+    | { message: string }
+    | {
+        url: string;
+        totalCountries: number;
+        results: CheckResult[];
+        countries: Array<{
+          code: string;
+          name: string;
+          region: string;
+        }>;
+      };
 }
 
 export interface StreamingState {

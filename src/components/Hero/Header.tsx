@@ -1,15 +1,11 @@
-import { Flex, rem, Title, Text, Group } from '@mantine/core';
+import { Flex, rem, Title, Group } from '@mantine/core';
 import CountriesBadge from './CountriesBadge';
-
-const Feature = ({ text }: { text: string }) => {
-  return (
-    <Text c='red.7' ta='center' fw='500' fz={{ base: rem(14), sm: rem(16) }}>
-      {text}
-    </Text>
-  );
-};
+import FeatureItem from './FeatureItem';
+import { getHeroFeatureItems } from '@/utils/hero-utils';
 
 const Header = () => {
+  const featureItems = getHeroFeatureItems();
+
   return (
     <Flex
       mt={{ base: rem(55), sm: rem(70) }}
@@ -42,11 +38,13 @@ const Header = () => {
       </Title>
 
       <Group gap={10} align='center' mt={10}>
-        <Feature text='Global Coverage' />
-        <Feature text='&#x2022;' />
-        <Feature text='Instant Results' />
-        <Feature text='&#x2022;' />
-        <Feature text='Real Proxies' />
+        {featureItems.map((item, index) => (
+          <FeatureItem
+            key={index}
+            text={item.text}
+            isSeparator={item.isSeparator}
+          />
+        ))}
       </Group>
     </Flex>
   );

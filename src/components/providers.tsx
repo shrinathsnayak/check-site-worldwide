@@ -3,7 +3,9 @@
 import { MantineProvider } from '@mantine/core';
 import theme from '@/styles/theme';
 
-export function Providers({ children }: { children: React.ReactNode }) {
+import type { ProvidersProps } from '@/types/component-types';
+
+export function Providers({ children }: ProvidersProps) {
   return (
     <MantineProvider
       theme={theme}

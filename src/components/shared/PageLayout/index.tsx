@@ -2,31 +2,27 @@
 
 import dynamic from 'next/dynamic';
 import { AppShell, Container } from '@mantine/core';
+import { appShellConfig, containerStyles, backgroundColors } from '@/utils/layout-utils';
 
 const Footer = dynamic(() => import('./components/Footer'));
 const Header = dynamic(() => import('./components/Header'));
 
-const PageLayout = ({ children }: { children: React.ReactNode }) => {
+import type { PageLayoutProps } from '@/types/component-types';
+
+const PageLayout = ({ children }: PageLayoutProps) => {
   return (
     <AppShell
-      layout='alt'
-      header={{ height: 62 }}
-      navbar={{
-        width: 300,
-        breakpoint: 'sm',
-        collapsed: { desktop: true },
-      }}
+      layout={appShellConfig.layout}
+      header={appShellConfig.header}
+      navbar={appShellConfig.navbar}
     >
       <Header />
-      <AppShell.Main bg='dark.9'>
+      <AppShell.Main bg={backgroundColors.dark9}>
         <Container
           px={0}
           size='lg'
           mih='100vh'
-          style={{
-            borderLeft: '1px dashed var(--mantine-color-dark-5) !important',
-            borderRight: '1px dashed var(--mantine-color-dark-5) !important',
-          }}
+          style={containerStyles}
         >
           {children}
         </Container>

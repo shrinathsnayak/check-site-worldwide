@@ -6,17 +6,10 @@ import { ALL_COUNTRIES } from '@/utils/countries';
 import { fetchWebshareProxies } from './webshare-api';
 import { logProxyStatus } from '@/utils/utils';
 import { info, debug } from '@/utils/logger';
+import { hasValidAuthentication } from '@/utils/proxy-utils';
 import { getWorkingProxiesForCountriesFromRedis } from '@/cache/proxy-redis';
 
-// Helper function to validate proxy authentication
-function hasValidAuthentication(proxy: PaidProxy): boolean {
-  return !!(
-    proxy.username &&
-    proxy.password &&
-    proxy.username.trim() !== '' &&
-    proxy.password.trim() !== ''
-  );
-}
+
 
 // Fetch proxies once for multiple countries and seed Redis with working ones
 export async function seedWorkingProxiesForCountries(

@@ -8,7 +8,7 @@ import type { CheckResult } from '@/types/types';
 import {
   getCachedResults,
   setCachedResults,
-  updateCachedResults
+  updateCachedResults,
 } from '@/cache/results-redis';
 
 export async function GET(request: NextRequest) {
@@ -99,7 +99,10 @@ async function handleStreamingRequest(
 ): Promise<Response> {
   const encoder = new TextEncoder();
 
-  const countries = targetCountries.length === ALL_COUNTRIES.length ? undefined : targetCountries;
+  const countries =
+    targetCountries.length === ALL_COUNTRIES.length
+      ? undefined
+      : targetCountries;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -128,7 +131,10 @@ async function handleStreamingRequest(
         const cachedResults = await getCachedResults(url, countries);
 
         if (cachedResults && cachedResults.length >= targetCountries.length) {
-          info(`Using cached results for streaming ${url} (${cachedResults.length} countries)`, 'api-check');
+          info(
+            `Using cached results for streaming ${url} (${cachedResults.length} countries)`,
+            'api-check'
+          );
 
           // Send cached data event - this tells client to skip loading
           const cachedData = {
@@ -142,17 +148,17 @@ async function handleStreamingRequest(
                 return {
                   code,
                   name: country?.name || code,
-                  region: country?.region || 'Unknown'
+                  region: country?.region || 'Unknown',
                 };
-              })
-            }
+              }),
+            },
           };
           safeEnqueue(`data: ${JSON.stringify(cachedData)}\n\n`);
 
           // Send completion event
           const completeData = {
             type: 'complete',
-            data: { timestamp: new Date().toISOString() }
+            data: { timestamp: new Date().toISOString() },
           };
           safeEnqueue(`data: ${JSON.stringify(completeData)}\n\n`);
           safeClose();
@@ -170,10 +176,10 @@ async function handleStreamingRequest(
               return {
                 code,
                 name: country?.name || code,
-                region: country?.region || 'Unknown'
+                region: country?.region || 'Unknown',
               };
-            })
-          }
+            }),
+          },
         };
         safeEnqueue(`data: ${JSON.stringify(initData)}\n\n`);
 
@@ -202,16 +208,22 @@ async function handleStreamingRequest(
             // Stream each result as it completes
             const resultData = {
               type: 'result',
-              data: result
+              data: result,
             };
             safeEnqueue(`data: ${JSON.stringify(resultData)}\n\n`);
 
-            info(`Streamed result ${completedCount}/${targetCountries.length} for ${result.country}`, 'api-check');
+            info(
+              `Streamed result ${completedCount}/${targetCountries.length} for ${result.country}`,
+              'api-check'
+            );
           }
         );
 
         // Ensure we have all results before completing
-        info(`All ${results.length} countries completed, finalizing stream`, 'api-check');
+        info(
+          `All ${results.length} countries completed, finalizing stream`,
+          'api-check'
+        );
 
         // Cache final complete results
         await setCachedResults(url, results, countries);
@@ -222,30 +234,29 @@ async function handleStreamingRequest(
           data: {
             timestamp: new Date().toISOString(),
             totalProcessed: results.length,
-            totalExpected: targetCountries.length
-          }
+            totalExpected: targetCountries.length,
+          },
         };
         safeEnqueue(`data: ${JSON.stringify(completeData)}\n\n`);
         safeClose();
-
       } catch (err) {
         const errorData = {
           type: 'error',
           data: {
-            message: err instanceof Error ? err.message : 'Unknown error'
-          }
+            message: err instanceof Error ? err.message : 'Unknown error',
+          },
         };
         safeEnqueue(`data: ${JSON.stringify(errorData)}\n\n`);
         safeClose();
       }
-    }
+    },
   });
 
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET',
       'Access-Control-Allow-Headers': 'Content-Type',

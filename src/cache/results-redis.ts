@@ -77,7 +77,9 @@ export async function updateCachedResults(
 
     if (existing && Array.isArray(existing)) {
       // Update existing result or add new one
-      const updatedResults = existing.filter(r => r.country !== newResult.country);
+      const updatedResults = existing.filter(
+        r => r.country !== newResult.country
+      );
       updatedResults.push(newResult);
 
       // Keep the original TTL by getting current TTL and setting it again
@@ -143,7 +145,10 @@ export async function clearAllCachedResults(): Promise<number> {
     const result = await redis.del(...keys);
     const deleted = typeof result === 'number' ? result : Number(result ?? 0);
 
-    info(`🗑️ (Redis) Cleared ${deleted} cached result entries`, 'results-cache');
+    info(
+      `🗑️ (Redis) Cleared ${deleted} cached result entries`,
+      'results-cache'
+    );
     return deleted;
   } catch (err) {
     debug(

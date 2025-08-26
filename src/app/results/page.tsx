@@ -32,10 +32,7 @@ export default async function ResultsPage({
 
   return (
     <PageLayout>
-      <StreamingResults
-        url={urlParam}
-        countries={countriesArray}
-      />
+      <StreamingResults url={urlParam} countries={countriesArray} />
     </PageLayout>
   );
 }

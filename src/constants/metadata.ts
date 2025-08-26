@@ -49,8 +49,8 @@ export const SOCIAL_CONFIG = {
     siteName: SITE_INFO.name,
   },
   twitter: {
-    handle: '@checksiteworldwide',
-    site: '@checksiteworldwide',
+    handle: '@kickstartdotsh',
+    site: '@kickstartdotsh',
     cardType: 'summary_large_image',
   },
 } as const;
@@ -68,13 +68,6 @@ export const IMAGE_CONFIG = {
     svg: '/favicon.svg',
     appleTouch: '/apple-touch-icon.png',
   },
-} as const;
-
-// Verification codes
-export const VERIFICATION_CODES = {
-  google: 'google-site-verification-code',
-  yandex: 'yandex-verification-code',
-  yahoo: 'yahoo-verification-code',
 } as const;
 
 // PWA configuration
@@ -141,11 +134,6 @@ export const METADATA: Metadata = {
       'max-snippet': -1,
     },
   },
-  verification: {
-    google: VERIFICATION_CODES.google,
-    yandex: VERIFICATION_CODES.yandex,
-    yahoo: VERIFICATION_CODES.yahoo,
-  },
   other: {
     category: SITE_INFO.category,
     classification: SITE_INFO.classification,
@@ -163,11 +151,7 @@ export const METADATA: Metadata = {
 // Sitemap configuration
 export const SITEMAP_CONFIG = {
   baseUrl: BASE_URL,
-  pages: [
-    { path: '/', priority: 1.0, changefreq: 'daily' },
-    { path: '/api/check', priority: 0.8, changefreq: 'weekly' },
-    { path: '/api/countries', priority: 0.8, changefreq: 'weekly' },
-  ],
+  pages: [{ path: '/', priority: 1.0, changefreq: 'daily' }],
 } as const;
 
 // Robots configuration

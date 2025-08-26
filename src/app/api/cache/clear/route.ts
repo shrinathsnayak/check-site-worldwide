@@ -4,10 +4,7 @@ import {
   deleteAllWorkingProxiesFromRedis,
   getWorkingProxyStats,
 } from '@/cache/proxy-redis';
-import {
-  clearAllCachedResults,
-  getCacheStats,
-} from '@/cache/results-redis';
+import { clearAllCachedResults, getCacheStats } from '@/cache/results-redis';
 import { info } from '@/utils/logger';
 
 export async function POST(request: NextRequest) {
@@ -64,7 +61,12 @@ export async function POST(request: NextRequest) {
       message: 'All caches cleared successfully',
       data: {
         cleared: true,
-        cachesCleared: ['proxy', 'website-check', 'redis:working-proxies', 'redis:results'],
+        cachesCleared: [
+          'proxy',
+          'website-check',
+          'redis:working-proxies',
+          'redis:results',
+        ],
         redisDeleted: {
           proxies: deletedProxies,
           results: deletedResults,
@@ -112,8 +114,16 @@ export async function GET() {
         redisWorkingProxies: redisProxyStats,
         redisResults: redisResultsStats,
         total: {
-          size: proxyStats.size + websiteCheckStats.size + redisProxyStats.total + redisResultsStats.totalEntries,
-          entries: [...proxyStats.entries, ...websiteCheckStats.entries, ...redisResultsStats.keys],
+          size:
+            proxyStats.size +
+            websiteCheckStats.size +
+            redisProxyStats.total +
+            redisResultsStats.totalEntries,
+          entries: [
+            ...proxyStats.entries,
+            ...websiteCheckStats.entries,
+            ...redisResultsStats.keys,
+          ],
         },
         timestamp: new Date().toISOString(),
       },

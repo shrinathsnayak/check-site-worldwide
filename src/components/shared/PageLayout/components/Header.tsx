@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { Anchor, AppShell, Container, Flex, Title } from '@mantine/core';
+import Image from 'next/image';
 
 const Header = () => {
   return (
@@ -27,6 +28,12 @@ const Header = () => {
           w='min-content'
         >
           <Flex align='center' justify='center' py='md' gap={10}>
+            <Image
+              src='/favicon.svg'
+              alt='Check Site Worldwide'
+              width={26}
+              height={26}
+            />
             <Title order={3} c='white'>
               checksiteworldwide.com
             </Title>
