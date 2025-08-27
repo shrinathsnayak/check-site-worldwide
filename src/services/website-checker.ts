@@ -114,14 +114,19 @@ export async function checkWebsiteFromCountries(
   const results: CheckResult[] = [];
   let rateLimitedObserved = false;
 
-  // Process countries in batches to control concurrency (dynamic)
-  for (let i = 0; i < orderedCountries.length;) {
-    const batch = orderedCountries.slice(i, i + currentConcurrency);
+  // Process countries in batches but stream results immediately
+  const BATCH_SIZE = currentConcurrency;
+  let completedCount = 0;
+
+  for (let i = 0; i < orderedCountries.length; i += BATCH_SIZE) {
+    const batch = orderedCountries.slice(i, i + BATCH_SIZE);
+
     info(
-      `Processing batch ${Math.floor(i / currentConcurrency) + 1}: ${batch.join(', ')}`,
+      `Processing batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.join(', ')}`,
       'website-check'
     );
 
+    // Process the batch in parallel
     const batchPromises = batch.map(async country => {
       try {
         // Race the real check against a fast-fail timeout per country to cap tail latency
@@ -147,58 +152,63 @@ export async function checkWebsiteFromCountries(
             )
           ),
         ]);
+
+        // Add to results safely
+        results.push(result);
+        completedCount++;
+
+        // Stream result immediately - but don't await it
+        if (onResult) {
+          setImmediate(() => {
+            onResult(result).catch(error => {
+              debug(`Error in onResult callback: ${error}`, 'website-check');
+            });
+          });
+        }
+
+        info(
+          `Completed ${completedCount}/${orderedCountries.length}: ${country} (${result.accessible ? 'accessible' : 'blocked'})`,
+          'website-check'
+        );
+
+        // Check for rate limiting
+        if (result.error && result.error.includes('429') && !rateLimitedObserved) {
+          rateLimitedObserved = true;
+          info(
+            `Rate limiting observed for ${country}`,
+            'website-check'
+          );
+        }
+
         return result;
       } catch (error) {
         debug(
           `Error processing ${country}: ${(error as Error).message}`,
           'website-check'
         );
-        return createErrorResponse(country, (error as Error).message, 0);
+        const errorResult = createErrorResponse(country, (error as Error).message, 0);
+        results.push(errorResult);
+        completedCount++;
+
+        if (onResult) {
+          setImmediate(() => {
+            onResult(errorResult).catch(error => {
+              debug(`Error in onResult callback: ${error}`, 'website-check');
+            });
+          });
+        }
+
+        return errorResult;
       }
     });
 
-    const batchResults = await Promise.allSettled(batchPromises);
+    // Wait for the entire batch to complete before starting the next batch
+    await Promise.allSettled(batchPromises);
 
-    // Process batch results and wait for all onResult callbacks
-    const onResultPromises: Promise<void>[] = [];
-
-    for (const result of batchResults) {
-      if (result.status === 'fulfilled') {
-        results.push(result.value);
-        if (onResult) {
-          try {
-            const onResultPromise = Promise.resolve(onResult(result.value));
-            onResultPromises.push(onResultPromise);
-          } catch (error) {
-            debug(`Error in onResult callback: ${error}`, 'website-check');
-          }
-        }
-      } else {
-        debug(`Batch promise rejected: ${result.reason}`, 'website-check');
-      }
+    // Small delay between batches to prevent overwhelming
+    if (i + BATCH_SIZE < orderedCountries.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
-
-    // Wait for all onResult callbacks to complete before continuing
-    if (onResultPromises.length > 0) {
-      await Promise.allSettled(onResultPromises);
-    }
-
-    // Adjust concurrency if we see signs of rate limiting
-    const saw429 = results
-      .slice(-batch.length)
-      .some(r => (r.error || '').includes('429'));
-    if (saw429 && !rateLimitedObserved) {
-      rateLimitedObserved = true;
-      currentConcurrency = Math.max(3, Math.floor(currentConcurrency / 2));
-      info(
-        `Rate limiting observed. Reducing concurrency to ${currentConcurrency}`,
-        'website-check'
-      );
-    }
-
-    // Reduce or remove inter-batch delay to accelerate checks
-    // If you observe upstream rate-limiting, consider reintroducing a small delay (e.g., 500ms)
-    i += batch.length;
   }
 
   info(

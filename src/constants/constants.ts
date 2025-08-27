@@ -5,7 +5,7 @@ export const PROXY_CONFIG = {
   TEST_TIMEOUT: 12000,
   MAX_PROXIES_PER_COUNTRY: 3,
   MAX_CONCURRENT_PROXY_TESTS: 10,
-  MAX_CONCURRENT_COUNTRY_CHECKS: 15,
+  MAX_CONCURRENT_COUNTRY_CHECKS: 25,
   PROXY_TEST_URL: 'http://httpbin.org/ip',
   // Request headers for better compatibility
   USER_AGENT: 'Check-Site-Worldwide/1.0', // Updated for project rename

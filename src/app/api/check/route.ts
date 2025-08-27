@@ -195,15 +195,17 @@ async function handleStreamingRequest(
             useHead: true,
             maxRedirects: 0,
           },
-          async (result: CheckResult) => {
+          (result: CheckResult) => {
             if (isClosed) return; // Skip if stream is closed
 
             // Add to results array
             allResults.push(result);
             completedCount++;
 
-            // Update Redis cache with partial result
-            await updateCachedResults(url, result, countries);
+            // Update Redis cache with partial result (don't await - fire and forget)
+            updateCachedResults(url, result, countries).catch(error => {
+              console.warn('Error updating cache:', error);
+            });
 
             // Stream each result as it completes
             const resultData = {
