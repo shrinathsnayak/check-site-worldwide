@@ -20,11 +20,7 @@ import type { CountryCardProps } from '@/types/component-types';
 function getStatusIcon(status: CountryStatus, result?: CheckResult) {
   switch (status) {
     case 'completed':
-      return result?.accessible ? (
-        <IconCheck size={16} />
-      ) : (
-        <IconX size={16} />
-      );
+      return result?.accessible ? <IconCheck size={16} /> : <IconX size={16} />;
     case 'error':
       return <IconX size={16} />;
     case 'loading':

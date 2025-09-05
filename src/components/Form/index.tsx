@@ -13,7 +13,7 @@ import { validateUrl } from '@/validation/validation';
 import {
   createResultsUrl,
   formValidation,
-  defaultFormValues
+  defaultFormValues,
 } from '@/utils/form-utils';
 import type { FormSubmissionHandler } from '@/types/form-types';
 
@@ -29,7 +29,7 @@ const Form = () => {
     },
   });
 
-  const handleFormSubmission: FormSubmissionHandler = async (values) => {
+  const handleFormSubmission: FormSubmissionHandler = async values => {
     const resultsUrl = createResultsUrl(values.url);
     router.push(resultsUrl);
   };
@@ -44,11 +44,7 @@ const Form = () => {
           direction={{ base: 'column', sm: 'row' }}
           gap={{ base: 'sm', sm: 0 }}
         >
-          <FormInput
-            form={form}
-            isSmUp={isSmUp}
-            disabled={false}
-          />
+          <FormInput form={form} isSmUp={isSmUp} disabled={false} />
           <div className={classes.mobileButton}>
             <SubmitButton fullWidth />
           </div>

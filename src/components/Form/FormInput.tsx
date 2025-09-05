@@ -7,7 +7,11 @@ import classes from './style.module.css';
 
 import type { FormInputProps } from '@/types/form-types';
 
-export default function FormInput({ form, isSmUp, disabled = false }: FormInputProps) {
+export default function FormInput({
+  form,
+  isSmUp,
+  disabled = false,
+}: FormInputProps) {
   return (
     <TextInput
       size='lg'

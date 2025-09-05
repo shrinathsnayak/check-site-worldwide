@@ -2,7 +2,7 @@ import { Box, Title, Container, rem } from '@mantine/core';
 import CountriesGrid from './SupportedCountries/CountriesGrid';
 import {
   getSupportedCountriesGroupedByRegion,
-  getCountryCountForRegion
+  getCountryCountForRegion,
 } from '@/utils/countries-display-utils';
 
 export default function SupportedCountries() {

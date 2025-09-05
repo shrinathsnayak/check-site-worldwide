@@ -24,7 +24,10 @@ export const formValidation = {
   /**
    * Validates a URL field and returns an error message or null
    */
-  url: (value: string, validateUrl: (url: string) => boolean): string | null => {
+  url: (
+    value: string,
+    validateUrl: (url: string) => boolean
+  ): string | null => {
     return validateUrl(value) ? null : 'Invalid URL';
   },
 };
@@ -35,5 +38,3 @@ export const formValidation = {
 export const defaultFormValues = {
   url: '',
 } as const;
-
-

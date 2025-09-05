@@ -71,7 +71,7 @@ export function createResponsiveFontSize(baseSize: string, smSize: string) {
 }
 
 /**
- * Creates responsive spacing object  
+ * Creates responsive spacing object
  */
 export function createResponsiveSpacing(baseSize: string, smSize: string) {
   return { base: rem(baseSize), sm: rem(smSize) };

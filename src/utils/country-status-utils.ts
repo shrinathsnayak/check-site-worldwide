@@ -4,7 +4,7 @@ export {
   getStatusText,
   getCardBackgroundColor,
   getCardBorderColor,
-  calculateCountryStats
+  calculateCountryStats,
 } from './component-utils';
 
 export { groupCountriesByRegion } from './grouping-utils';

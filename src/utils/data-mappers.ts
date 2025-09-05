@@ -4,7 +4,9 @@ import type { FeatureData, HeroFeatureItem } from '@/types/utility-types';
 /**
  * Maps feature data to feature props
  */
-export function mapFeatureDataToProps(featureData: FeatureData[]): FeatureProps[] {
+export function mapFeatureDataToProps(
+  featureData: FeatureData[]
+): FeatureProps[] {
   return featureData.map(feature => ({
     icon: feature.icon,
     title: feature.title,
@@ -15,7 +17,9 @@ export function mapFeatureDataToProps(featureData: FeatureData[]): FeatureProps[
 /**
  * Gets hero feature items with separators
  */
-export function getHeroFeatureItems(features: readonly string[]): HeroFeatureItem[] {
+export function getHeroFeatureItems(
+  features: readonly string[]
+): HeroFeatureItem[] {
   const items: HeroFeatureItem[] = [];
   const separator = '•';
 

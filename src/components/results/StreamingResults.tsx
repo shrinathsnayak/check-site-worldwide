@@ -13,11 +13,7 @@ import {
   Loader,
   SegmentedControl,
 } from '@mantine/core';
-import {
-  IconCheck,
-  IconGrid3x3,
-  IconTable,
-} from '@tabler/icons-react';
+import { IconCheck, IconGrid3x3, IconTable } from '@tabler/icons-react';
 import { useStreamingCheck } from '@/hooks/useStreamingCheck';
 import ResultsTable from './ResultsTable';
 import ResultsGrid from './ResultsGrid';
@@ -51,7 +47,8 @@ export default function StreamingResults({
     };
   }, [url, countries, startStreaming]);
 
-  const { successfulCount, errorCount, avgResponseTime } = calculateCountryStats(countryStates);
+  const { successfulCount, errorCount, avgResponseTime } =
+    calculateCountryStats(countryStates);
 
   return (
     <Container size='lg' py='md'>

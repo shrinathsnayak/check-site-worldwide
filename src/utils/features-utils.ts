@@ -41,7 +41,7 @@ export const FEATURES_DATA = [
 /**
  * Type for feature data items
  */
-export type FeatureData = typeof FEATURES_DATA[number];
+export type FeatureData = (typeof FEATURES_DATA)[number];
 
 // Re-export from mappers
 export { mapFeatureDataToProps } from './data-mappers';

@@ -11,7 +11,7 @@ import { getHeroFeatureItems as getHeroFeatureItemsFromArray } from './data-mapp
 export const HERO_FEATURES = [
   'Global Coverage',
   'Instant Results',
-  'Real Proxies'
+  'Real Proxies',
 ] as const;
 
 /**

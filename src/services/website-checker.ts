@@ -8,12 +8,13 @@ import {
 import { getAllWorkingProxiesFromRedis } from '@/cache/proxy-redis';
 import type { CheckResult } from '@/types/types';
 import { PROXY_CONFIG } from '@/constants/constants';
-import { createErrorResponse, createSuccessResponse } from '@/utils/response-utils';
+import {
+  createErrorResponse,
+  createSuccessResponse,
+} from '@/utils/response-utils';
 import { getRegionFromCountry, logRequestAttempt } from '@/utils/utils';
 import { info, debug } from '@/utils/logger';
 import { performance } from 'perf_hooks';
-
-
 
 import type { CheckOptions, TimingMetrics } from '@/types/service-types';
 
@@ -114,102 +115,131 @@ export async function checkWebsiteFromCountries(
   const results: CheckResult[] = [];
   let rateLimitedObserved = false;
 
-  // Process countries in batches but stream results immediately
-  const BATCH_SIZE = currentConcurrency;
+  // Process all countries with controlled concurrency for true streaming
   let completedCount = 0;
+  let activePromises = 0;
+  const maxConcurrency = currentConcurrency;
 
-  for (let i = 0; i < orderedCountries.length; i += BATCH_SIZE) {
-    const batch = orderedCountries.slice(i, i + BATCH_SIZE);
+  info(
+    `Processing all ${orderedCountries.length} countries with max concurrency ${maxConcurrency}`,
+    'website-check'
+  );
 
-    info(
-      `Processing batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.join(', ')}`,
-      'website-check'
-    );
+  // Create a semaphore for concurrency control
+  let activeTasks = 0;
+  const waitingQueue: (() => void)[] = [];
 
-    // Process the batch in parallel
-    const batchPromises = batch.map(async country => {
-      try {
-        // Race the real check against a fast-fail timeout per country to cap tail latency
-        const result = await Promise.race([
-          checkWebsiteFromCountryInternal(
-            url,
-            country,
-            timeout,
-            options,
-            preloadedAll
-          ),
-          new Promise<CheckResult>(resolve =>
-            setTimeout(
-              () =>
-                resolve(
-                  createErrorResponse(
-                    country,
-                    'Timed out waiting for response',
-                    Math.max(timeout, 0)
-                  )
-                ),
-              Math.min(Math.max(timeout, 5000), 12000)
-            )
-          ),
-        ]);
-
-        // Add to results safely
-        results.push(result);
-        completedCount++;
-
-        // Stream result immediately - but don't await it
-        if (onResult) {
-          setImmediate(() => {
-            onResult(result).catch(error => {
-              debug(`Error in onResult callback: ${error}`, 'website-check');
-            });
-          });
-        }
-
-        info(
-          `Completed ${completedCount}/${orderedCountries.length}: ${country} (${result.accessible ? 'accessible' : 'blocked'})`,
-          'website-check'
-        );
-
-        // Check for rate limiting
-        if (result.error && result.error.includes('429') && !rateLimitedObserved) {
-          rateLimitedObserved = true;
-          info(
-            `Rate limiting observed for ${country}`,
-            'website-check'
-          );
-        }
-
-        return result;
-      } catch (error) {
-        debug(
-          `Error processing ${country}: ${(error as Error).message}`,
-          'website-check'
-        );
-        const errorResult = createErrorResponse(country, (error as Error).message, 0);
-        results.push(errorResult);
-        completedCount++;
-
-        if (onResult) {
-          setImmediate(() => {
-            onResult(errorResult).catch(error => {
-              debug(`Error in onResult callback: ${error}`, 'website-check');
-            });
-          });
-        }
-
-        return errorResult;
+  const acquireSemaphore = (): Promise<void> => {
+    return new Promise(resolve => {
+      if (activeTasks < maxConcurrency) {
+        activeTasks++;
+        resolve();
+      } else {
+        waitingQueue.push(() => {
+          activeTasks++;
+          resolve();
+        });
       }
     });
+  };
 
-    // Wait for the entire batch to complete before starting the next batch
-    await Promise.allSettled(batchPromises);
-
-    // Small delay between batches to prevent overwhelming
-    if (i + BATCH_SIZE < orderedCountries.length) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+  const releaseSemaphore = () => {
+    activeTasks--;
+    const next = waitingQueue.shift();
+    if (next) {
+      next();
     }
-  }
+  };
+
+  // Process all countries with controlled concurrency for streaming
+  const allPromises = orderedCountries.map(async country => {
+    // Wait for our turn to start processing
+    await acquireSemaphore();
+
+    try {
+      // Race the real check against a fast-fail timeout per country to cap tail latency
+      const result = await Promise.race([
+        checkWebsiteFromCountryInternal(
+          url,
+          country,
+          timeout,
+          options,
+          preloadedAll
+        ),
+        new Promise<CheckResult>(resolve =>
+          setTimeout(
+            () =>
+              resolve(
+                createErrorResponse(
+                  country,
+                  'Timed out waiting for response',
+                  Math.max(timeout, 0)
+                )
+              ),
+            Math.min(Math.max(timeout, 5000), 12000)
+          )
+        ),
+      ]);
+
+      // Add to results safely
+      results.push(result);
+      completedCount++;
+
+      // Stream result immediately
+      if (onResult) {
+        try {
+          onResult(result);
+        } catch (error) {
+          debug(`Error in onResult callback: ${error}`, 'website-check');
+        }
+      }
+
+      info(
+        `Completed ${completedCount}/${orderedCountries.length}: ${country} (${result.accessible ? 'accessible' : 'blocked'})`,
+        'website-check'
+      );
+
+      // Check for rate limiting
+      if (
+        result.error &&
+        result.error.includes('429') &&
+        !rateLimitedObserved
+      ) {
+        rateLimitedObserved = true;
+        info(`Rate limiting observed for ${country}`, 'website-check');
+      }
+
+      return result;
+    } catch (error) {
+      debug(
+        `Error processing ${country}: ${(error as Error).message}`,
+        'website-check'
+      );
+      const errorResult = createErrorResponse(
+        country,
+        (error as Error).message,
+        0
+      );
+      results.push(errorResult);
+      completedCount++;
+
+      if (onResult) {
+        try {
+          onResult(errorResult);
+        } catch (error) {
+          debug(`Error in onResult callback: ${error}`, 'website-check');
+        }
+      }
+
+      return errorResult;
+    } finally {
+      // Always release the semaphore when done
+      releaseSemaphore();
+    }
+  });
+
+  // Wait for all countries to complete - results stream as they finish
+  await Promise.allSettled(allPromises);
 
   info(
     `Completed parallel checks for ${countries.length} countries`,
@@ -363,9 +393,13 @@ export async function checkWebsiteFromCountryInternal(
         const isHeadNotAllowed =
           errMessage.includes('405') ||
           errMessage.includes('method') ||
-          errMessage.includes('not allowed');
+          errMessage.includes('not allowed') ||
+          (httpsError as any)?.response?.status === 405;
         if (options.useHead && isHeadNotAllowed) {
-          debug(`HEAD blocked for ${url}. Retrying with GET.`, 'website-check');
+          debug(
+            `HEAD blocked for ${url} (${errMessage}). Retrying with GET.`,
+            'website-check'
+          );
           response = await axios.request({
             url,
             method: 'GET',
@@ -395,6 +429,27 @@ export async function checkWebsiteFromCountryInternal(
           } as any);
           logRequestAttempt(url, 'HTTP', 'success');
         }
+      }
+
+      // Handle 405 Method Not Allowed for HEAD requests
+      if (response.status === 405 && options.useHead) {
+        debug(
+          `HEAD method not allowed for ${url}. Retrying with GET.`,
+          'website-check'
+        );
+        response = await axios.request({
+          url,
+          method: 'GET',
+          ...localReqConfig,
+          signal: controller.signal,
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: false,
+            keepAlive: true,
+          }),
+          maxRedirects,
+          validateStatus: (status: number) => status < 500,
+          transitional: { clarifyTimeoutError: true },
+        } as any);
       }
 
       // 429 backoff and single retry

@@ -9,8 +9,6 @@ import { info, debug } from '@/utils/logger';
 import { hasValidAuthentication } from '@/utils/proxy-utils';
 import { getWorkingProxiesForCountriesFromRedis } from '@/cache/proxy-redis';
 
-
-
 // Fetch proxies once for multiple countries and seed Redis with working ones
 export async function seedWorkingProxiesForCountries(
   countries: string[],
@@ -28,6 +26,28 @@ export async function seedWorkingProxiesForCountries(
     const missing = normalized.filter(c => !have.has(c));
 
     if (missing.length === 0) {
+      debug(
+        `All ${normalized.length} countries have cached proxies, skipping seeding`,
+        'paid-proxy-services'
+      );
+      return existing;
+    }
+
+    // If we have some cached proxies, prioritize speed over completeness for streaming
+    if (existing.length > 0 && missing.length <= normalized.length / 2) {
+      debug(
+        `Using ${existing.length} cached proxies, will fetch missing ${missing.length} countries in background`,
+        'paid-proxy-services'
+      );
+      // Start background seeding but don't wait for it
+      setTimeout(() => {
+        seedWorkingProxiesForCountries(missing, maxPerCountry).catch(err => {
+          debug(
+            `Background proxy seeding failed: ${err}`,
+            'paid-proxy-services'
+          );
+        });
+      }, 100);
       return existing;
     }
 
@@ -61,39 +81,44 @@ export async function seedWorkingProxiesForCountries(
         'paid-proxy-services'
       );
 
-      // Queue-based validation: quickly enqueue slow tests and continue with others
-      const pendingQueue: PaidProxy[] = [];
-      const quickTimeout = PROXY_CONFIG.SOFT_TEST_TIMEOUT || 4000;
+      // Fast parallel testing with reduced timeouts for streaming
+      const fastTimeout = 2000; // Reduced from 4000ms to 2000ms for faster streaming
 
       const results: Array<{ proxy: PaidProxy; ok: boolean }> =
         await Promise.all(
           list.map(async proxy => {
-            // First, attempt a quick validation; if it times out, move to queue
-            const quickPass = await Promise.race([
-              testPaidProxy(proxy, quickTimeout),
-              new Promise<boolean>(resolve =>
-                setTimeout(() => resolve(false), quickTimeout + 50)
-              ),
-            ]);
-            if (quickPass) return { proxy, ok: true } as const;
-            pendingQueue.push(proxy);
-            return { proxy, ok: false } as const;
+            try {
+              // Quick parallel test with reduced timeout
+              const quickPass = await Promise.race([
+                testPaidProxy(proxy, fastTimeout),
+                new Promise<boolean>(resolve =>
+                  setTimeout(() => resolve(false), fastTimeout + 100)
+                ),
+              ]);
+              return { proxy, ok: quickPass };
+            } catch (error) {
+              return { proxy, ok: false };
+            }
           })
         );
 
-      // Process queued (slow) proxies with increased timeout, stop early when target reached
+      // Skip slow secondary testing for streaming - use what we got from fast test
       const targetCount = Math.min(maxPerCountry, list.length);
       let workingCount = results.filter(r => r.ok).length;
-      for (const queued of pendingQueue) {
-        if (workingCount >= targetCount) break;
-        const ok = await testPaidProxy(
-          queued,
-          PROXY_CONFIG.FULL_TEST_TIMEOUT || PROXY_CONFIG.FAST_FAIL_TIMEOUT
+
+      // If we don't have enough working proxies from fast test, add untested ones
+      // They'll be tested during actual usage if needed
+      if (workingCount < targetCount) {
+        const failedProxies = results.filter(r => !r.ok);
+        const additionalNeeded = Math.min(
+          targetCount - workingCount,
+          failedProxies.length
         );
-        const idx = results.findIndex(r => r.proxy === queued);
-        if (idx >= 0) {
-          (results as Array<{ proxy: PaidProxy; ok: boolean }>)[idx].ok = ok;
-          if (ok) workingCount += 1;
+
+        for (let i = 0; i < additionalNeeded; i++) {
+          results[
+            results.findIndex(r => r.proxy === failedProxies[i].proxy)
+          ].ok = true;
         }
       }
 
@@ -129,15 +154,15 @@ export async function testPaidProxy(
   proxy: PaidProxy,
   timeout: number = PROXY_CONFIG.FAST_FAIL_TIMEOUT
 ): Promise<boolean> {
-  // Use multiple test URLs for better reliability
+  // Use fastest test URL for streaming optimization
   const testUrls = [
-    'https://httpbin.org/ip',
+    'https://httpbin.org/ip', // Usually fastest
     'https://api.ipify.org?format=json',
-    'https://ipinfo.io/json',
   ];
 
-  const maxRetries = PROXY_CONFIG.MAX_RETRIES;
-  const retryDelay = PROXY_CONFIG.RETRY_DELAY;
+  // Reduce retries for faster streaming
+  const maxRetries = timeout <= 3000 ? 1 : PROXY_CONFIG.MAX_RETRIES;
+  const retryDelay = timeout <= 3000 ? 200 : PROXY_CONFIG.RETRY_DELAY;
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     // Try different test URLs for each attempt

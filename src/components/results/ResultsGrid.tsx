@@ -2,7 +2,10 @@
 
 import { Box, Title, SimpleGrid } from '@mantine/core';
 import type { CheckResult } from '@/types/types';
-import { groupCountriesByRegion, type CountryStatus } from '@/utils/country-status-utils';
+import {
+  groupCountriesByRegion,
+  type CountryStatus,
+} from '@/utils/country-status-utils';
 import CountryCard from './CountryCard';
 
 import type { ResultsGridProps } from '@/types/component-types';

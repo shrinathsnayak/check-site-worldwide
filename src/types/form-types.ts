@@ -3,7 +3,9 @@ import { UseFormReturnType } from '@mantine/form';
 /**
  * Form submission handler type
  */
-export type FormSubmissionHandler = (values: { url: string }) => Promise<void> | void;
+export type FormSubmissionHandler = (values: {
+  url: string;
+}) => Promise<void> | void;
 
 /**
  * Form input component props

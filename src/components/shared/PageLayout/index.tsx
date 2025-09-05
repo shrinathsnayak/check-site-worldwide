@@ -2,7 +2,11 @@
 
 import dynamic from 'next/dynamic';
 import { AppShell, Container } from '@mantine/core';
-import { appShellConfig, containerStyles, backgroundColors } from '@/utils/layout-utils';
+import {
+  appShellConfig,
+  containerStyles,
+  backgroundColors,
+} from '@/utils/layout-utils';
 
 const Footer = dynamic(() => import('./components/Footer'));
 const Header = dynamic(() => import('./components/Header'));
@@ -18,12 +22,7 @@ const PageLayout = ({ children }: PageLayoutProps) => {
     >
       <Header />
       <AppShell.Main bg={backgroundColors.dark9}>
-        <Container
-          px={0}
-          size='lg'
-          mih='100vh'
-          style={containerStyles}
-        >
+        <Container px={0} size='lg' mih='100vh' style={containerStyles}>
           {children}
         </Container>
       </AppShell.Main>

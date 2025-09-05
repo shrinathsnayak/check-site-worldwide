@@ -21,4 +21,7 @@ export interface TimingMetrics {
 /**
  * Proxy authentication validation function type
  */
-export type ProxyAuthValidator = (proxy: { username?: string; password?: string }) => boolean;
+export type ProxyAuthValidator = (proxy: {
+  username?: string;
+  password?: string;
+}) => boolean;

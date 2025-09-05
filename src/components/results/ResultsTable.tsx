@@ -47,11 +47,7 @@ function getStatusBadge(status: CountryStatus, result?: CheckResult) {
   switch (status) {
     case 'completed':
       return (
-        <Badge
-          color={getStatusColor(status, result)}
-          variant='light'
-          size='sm'
-        >
+        <Badge color={getStatusColor(status, result)} variant='light' size='sm'>
           {result?.statusCode}
         </Badge>
       );
@@ -107,17 +103,17 @@ export default function ResultsTable({
           <Table withTableBorder verticalSpacing='sm'>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th c="dimmed">Country</Table.Th>
-                <Table.Th c="dimmed">Status</Table.Th>
-                <Table.Th c="dimmed">Total Time</Table.Th>
-                <Table.Th c="dimmed">IP Address</Table.Th>
-                <Table.Th c="dimmed">DNS</Table.Th>
-                <Table.Th c="dimmed">Connect</Table.Th>
-                <Table.Th c="dimmed">TLS</Table.Th>
-                <Table.Th c="dimmed">TTFB</Table.Th>
-                <Table.Th c="dimmed">Transfer</Table.Th>
-                <Table.Th c="dimmed">Latency</Table.Th>
-                <Table.Th c="dimmed">Error</Table.Th>
+                <Table.Th c='dimmed'>Country</Table.Th>
+                <Table.Th c='dimmed'>Status</Table.Th>
+                <Table.Th c='dimmed'>Total Time</Table.Th>
+                <Table.Th c='dimmed'>IP Address</Table.Th>
+                <Table.Th c='dimmed'>DNS</Table.Th>
+                <Table.Th c='dimmed'>Connect</Table.Th>
+                <Table.Th c='dimmed'>TLS</Table.Th>
+                <Table.Th c='dimmed'>TTFB</Table.Th>
+                <Table.Th c='dimmed'>Transfer</Table.Th>
+                <Table.Th c='dimmed'>Latency</Table.Th>
+                <Table.Th c='dimmed'>Error</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -186,7 +182,7 @@ export default function ResultsTable({
 
                     <Table.Td>
                       {result ? (
-                        <Text size='sm' fw={500} c="white">
+                        <Text size='sm' fw={500} c='white'>
                           {millisecondsToSeconds(result.responseTime)}s
                         </Text>
                       ) : (

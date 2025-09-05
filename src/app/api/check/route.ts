@@ -10,6 +10,7 @@ import {
   setCachedResults,
   updateCachedResults,
 } from '@/cache/results-redis';
+import { checkURLReachability } from '@/utils/url-reachability';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,6 +40,30 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Check URL reachability before expensive proxy testing
+    info(`Performing URL reachability check for: ${url}`, 'api-check');
+    const reachabilityResult = await checkURLReachability(url, 10000);
+
+    if (!reachabilityResult.isReachable) {
+      info(
+        `URL reachability check failed for ${url}: ${reachabilityResult.error}`,
+        'api-check'
+      );
+      return NextResponse.json(
+        createErrorResponse(
+          'URL not reachable',
+          `The website ${url} is not reachable: ${reachabilityResult.error}`,
+          400
+        ),
+        { status: 400 }
+      );
+    }
+
+    info(
+      `URL reachability check passed for ${url} (${reachabilityResult.statusCode}) in ${reachabilityResult.responseTime}ms`,
+      'api-check'
+    );
+
     // Parse and validate countries
     const countries = countriesParam ? countriesParam.split(',') : [];
     const supportedCountries = ALL_COUNTRIES.map(country => country.code);
@@ -57,17 +82,43 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use a sensible default timeout for all checks
-    const timeout = 10000; // 10 seconds
-
     // If no countries specified, use all available countries
     const targetCountries =
       countries.length > 0
         ? countries
         : ALL_COUNTRIES.map(country => country.code);
 
+    // Use adaptive timeout based on number of countries and known slow regions
+    let timeout = 10000; // 10 seconds default
+
+    // Increase timeout for countries known to have slower proxies
+    const slowCountries = ['GR', 'TR', 'RO', 'BG', 'HR', 'RS']; // Eastern/Southern Europe
+    const hasSlowCountries = targetCountries.some(country =>
+      slowCountries.includes(country.toUpperCase())
+    );
+
+    if (hasSlowCountries) {
+      timeout = 15000; // 15 seconds for slower countries
+    }
+
+    // Further increase for complex websites that tend to be slower
+    const hostname = new URL(url).hostname.toLowerCase();
+    const slowWebsites = [
+      'primevideo.com',
+      'netflix.com',
+      'disney',
+      'hulu.com',
+    ];
+    const isSlowWebsite = slowWebsites.some(site => hostname.includes(site));
+
+    if (isSlowWebsite && hasSlowCountries) {
+      timeout = 20000; // 20 seconds for slow countries + slow websites
+    } else if (isSlowWebsite) {
+      timeout = 15000; // 15 seconds for slow websites
+    }
+
     info(
-      `Starting website accessibility check for ${url} from ${targetCountries.length} countries (streaming)`,
+      `Starting website accessibility check for ${url} from ${targetCountries.length} countries (streaming, timeout: ${timeout}ms)`,
       'api-check'
     );
 

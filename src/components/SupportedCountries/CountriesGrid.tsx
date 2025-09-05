@@ -8,7 +8,10 @@ export default function CountriesGrid({ countries }: CountriesGridProps) {
   return (
     <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing='sm'>
       {countries.map(country => (
-        <CountryCard key={`${country.code}-${country.name}`} country={country} />
+        <CountryCard
+          key={`${country.code}-${country.name}`}
+          country={country}
+        />
       ))}
     </SimpleGrid>
   );
